@@ -1,2 +1,0 @@
-# copybook-generator
-Copybook generator 
