@@ -15,7 +15,7 @@ from pathlib import Path
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm
 from reportlab.pdfgen import canvas
-from reportlab.lib.colors import Color, black, gray
+from reportlab.lib.colors import Color, black, gray, red, blue
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 
@@ -48,8 +48,6 @@ class CopybookGenerator:
         self.margin_right = 20 * mm
         self.margin_top = 30 * mm
         self.margin_bottom = 20 * mm
-        
-        self.stroke_section_height = 40 * mm
         
         self._init_font(font_path)
         self._calculate_grid_dimensions()
@@ -90,7 +88,7 @@ class CopybookGenerator:
     def _calculate_grid_dimensions(self):
         """计算田字格尺寸"""
         usable_width = self.paper_width - self.margin_left - self.margin_right
-        usable_height = self.paper_height - self.margin_top - self.margin_bottom - self.stroke_section_height
+        usable_height = self.paper_height - self.margin_top - self.margin_bottom
         
         self.grid_size = min(
             usable_width / self.grid_cols,
@@ -133,7 +131,9 @@ class CopybookGenerator:
         return True, ""
     
     def _draw_grid(self, c: canvas.Canvas, x: float, y: float, 
-                   is_highlight: bool = False, character: str = ""):
+                   is_stroke_demo: bool = False, 
+                   is_highlight: bool = False, 
+                   character: str = ""):
         """
         绘制单个田字格
         
@@ -141,7 +141,8 @@ class CopybookGenerator:
             c: PDF画布对象
             x: 田字格左下角x坐标
             y: 田字格左下角y坐标
-            is_highlight: 是否为高亮模式（第一行）
+            is_stroke_demo: 是否为笔画展示模式（第一个格子）
+            is_highlight: 是否为高亮模式（描红）
             character: 要显示的汉字
         """
         grid_size = self.grid_size
@@ -162,7 +163,37 @@ class CopybookGenerator:
         c.setStrokeColor(gray)
         c.setLineWidth(1)
         
-        if character and is_highlight:
+        if character and is_stroke_demo:
+            c.setFillColor(Color(0.95, 0.95, 0.95))
+            c.rect(x, y, grid_size, grid_size, fill=1, stroke=0)
+            
+            c.setFillColor(Color(0.7, 0.7, 0.7))
+            c.setFont(self.font_name, self.font_size)
+            
+            text_width = c.stringWidth(character, self.font_name, self.font_size)
+            text_x = x + (grid_size - text_width) / 2
+            text_y = y + (grid_size - self.font_size) / 2 + 5
+            
+            c.drawString(text_x, text_y, character)
+            
+            strokes = self.stroke_data.get(character, [])
+            if strokes:
+                num_strokes = len(strokes)
+                
+                positions = self._get_stroke_positions(x, y, grid_size, num_strokes)
+                
+                for i, (pos_x, pos_y) in enumerate(positions):
+                    c.setFillColor(red)
+                    c.setFont("Helvetica-Bold", 14)
+                    order_text = f"{i+1}"
+                    order_width = c.stringWidth(order_text, "Helvetica-Bold", 14)
+                    c.drawString(pos_x - order_width/2, pos_y, order_text)
+            
+            c.setStrokeColor(gray)
+            c.setLineWidth(1)
+            c.rect(x, y, grid_size, grid_size)
+        
+        if character and is_highlight and not is_stroke_demo:
             c.setFillColor(Color(0.95, 0.95, 0.95))
             c.rect(x, y, grid_size, grid_size, fill=1, stroke=0)
             
@@ -179,68 +210,54 @@ class CopybookGenerator:
             c.setLineWidth(1)
             c.rect(x, y, grid_size, grid_size)
     
-    def _draw_stroke_demonstration(self, c: canvas.Canvas, character: str, 
-                                    x: float, y: float):
+    def _get_stroke_positions(self, x: float, y: float, grid_size: float, num_strokes: int) -> List[Tuple[float, float]]:
         """
-        绘制笔画步骤展示
+        获取笔画编号在田字格中的位置
         
         Args:
-            c: PDF画布对象
-            character: 汉字
-            x: 左下角x坐标
-            y: 左下角y坐标
+            x: 田字格左下角x坐标
+            y: 田字格左下角y坐标
+            grid_size: 田字格大小
+            num_strokes: 笔画数量
+            
+        Returns:
+            List[Tuple[float, float]]: 每个笔画编号的位置列表
         """
-        strokes = self.stroke_data.get(character, [])
+        positions = []
+        center_x = x + grid_size / 2
+        center_y = y + grid_size / 2
         
-        if not strokes:
-            strokes = [f"第{i+1}笔" for i in range(8)]
+        if num_strokes == 1:
+            positions.append((center_x, center_y))
+        elif num_strokes == 2:
+            positions.append((center_x - grid_size * 0.2, center_y + grid_size * 0.2))
+            positions.append((center_x + grid_size * 0.2, center_y - grid_size * 0.2))
+        elif num_strokes == 3:
+            positions.append((center_x, center_y + grid_size * 0.25))
+            positions.append((center_x - grid_size * 0.25, center_y))
+            positions.append((center_x + grid_size * 0.25, center_y))
+        elif num_strokes == 4:
+            positions.append((center_x - grid_size * 0.25, center_y + grid_size * 0.25))
+            positions.append((center_x + grid_size * 0.25, center_y + grid_size * 0.25))
+            positions.append((center_x - grid_size * 0.25, center_y - grid_size * 0.25))
+            positions.append((center_x + grid_size * 0.25, center_y - grid_size * 0.25))
+        elif num_strokes == 5:
+            positions.append((center_x, center_y + grid_size * 0.3))
+            positions.append((center_x - grid_size * 0.3, center_y + grid_size * 0.1))
+            positions.append((center_x + grid_size * 0.3, center_y + grid_size * 0.1))
+            positions.append((center_x - grid_size * 0.2, center_y - grid_size * 0.25))
+            positions.append((center_x + grid_size * 0.2, center_y - grid_size * 0.25))
+        else:
+            for i in range(num_strokes):
+                angle = (i / num_strokes) * 360
+                import math
+                rad = math.radians(angle)
+                radius = grid_size * 0.35
+                pos_x = center_x + math.cos(rad) * radius
+                pos_y = center_y + math.sin(rad) * radius
+                positions.append((pos_x, pos_y))
         
-        section_width = self.paper_width - self.margin_left - self.margin_right
-        section_height = self.stroke_section_height
-        
-        c.setStrokeColor(gray)
-        c.setLineWidth(1)
-        c.rect(x, y, section_width, section_height)
-        
-        c.setFont("Helvetica-Bold", 14)
-        c.setFillColor(black)
-        title = f"汉字：{character}  笔画顺序"
-        title_width = c.stringWidth(title, "Helvetica-Bold", 14)
-        c.drawString(x + (section_width - title_width) / 2, 
-                     y + section_height - 10 * mm, 
-                     title)
-        
-        num_strokes = len(strokes)
-        max_strokes_per_row = 8
-        box_size = min(25 * mm, (section_width - 20 * mm) / max_strokes_per_row)
-        
-        for i, stroke in enumerate(strokes):
-            row = i // max_strokes_per_row
-            col = i % max_strokes_per_row
-            
-            box_x = x + 10 * mm + col * box_size
-            box_y = y + section_height - 25 * mm - row * 30 * mm
-            
-            if box_y < y + 5 * mm:
-                break
-            
-            c.setStrokeColor(gray)
-            c.setLineWidth(1)
-            c.rect(box_x, box_y, box_size, box_size)
-            
-            c.setFillColor(black)
-            c.setFont("Helvetica", 10)
-            order_text = f"{i+1}"
-            order_width = c.stringWidth(order_text, "Helvetica", 10)
-            c.drawString(box_x + (box_size - order_width) / 2, 
-                         box_y + box_size - 8, 
-                         order_text)
-            
-            c.setFont(self.font_name, 24)
-            char_width = c.stringWidth(character, self.font_name, 24)
-            c.drawString(box_x + (box_size - char_width) / 2, 
-                         box_y + 8, 
-                         character)
+        return positions
     
     def _draw_page(self, c: canvas.Canvas, character: str, page_num: int):
         """
@@ -256,13 +273,12 @@ class CopybookGenerator:
                 x = self.margin_left + self.grid_padding + col * self.grid_size
                 y = self.paper_height - self.margin_top - (row + 1) * self.grid_size
                 
-                is_highlight = (row == 0)
-                self._draw_grid(c, x, y, is_highlight=is_highlight, 
-                               character=character if is_highlight else "")
-        
-        self._draw_stroke_demonstration(c, character, 
-                                        self.margin_left, 
-                                        self.margin_bottom)
+                is_first_cell = (row == 0 and col == 0)
+                
+                self._draw_grid(c, x, y, 
+                               is_stroke_demo=is_first_cell,
+                               is_highlight=is_first_cell,
+                               character=character if is_first_cell else "")
         
         c.setFont("Helvetica", 10)
         c.setFillColor(gray)
