@@ -9,15 +9,56 @@
 import sys
 import os
 import json
-from typing import List, Tuple, Optional
+import math
+from typing import List, Tuple, Optional, Dict, Any
 from pathlib import Path
 
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm
 from reportlab.pdfgen import canvas
-from reportlab.lib.colors import Color, black, gray, red, blue
+from reportlab.lib.colors import Color, black, gray, red, blue, green
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
+
+
+class StrokeType:
+    """笔画类型"""
+    HENG = "横"
+    SHU = "竖"
+    PIE = "撇"
+    NA = "捺"
+    DIAN = "点"
+    HENG_ZHE = "横折"
+    SHU_GOU = "竖钩"
+    HENG_GOU = "横钩"
+    PIE_DIAN = "撇点"
+    HENG_PIE = "横撇"
+    SHU_ZHE = "竖折"
+    SHU_WAN = "竖弯"
+    SHU_WAN_GOU = "竖弯钩"
+    WO_GOU = "卧钩"
+    XIE_GOU = "斜钩"
+    HENG_ZHE_GOU = "横折钩"
+    HENG_ZHE_WAN_GOU = "横折弯钩"
+    HENG_XIE_GOU = "横斜钩"
+    SHU_ZHE_ZHE_GOU = "竖折折钩"
+    HENG_ZHE_ZHE = "横折折"
+    HENG_ZHE_ZHE_PIE = "横折折撇"
+    HENG_ZHE_PIE = "横折撇"
+    PIE_ZHE = "撇折"
+    TI = "提"
+    WAN_GOU = "弯钩"
+
+
+class StrokeDirection:
+    """笔画方向"""
+    LEFT_TO_RIGHT = "left_to_right"
+    TOP_TO_BOTTOM = "top_to_bottom"
+    TOP_LEFT_TO_BOTTOM_RIGHT = "top_left_to_bottom_right"
+    TOP_RIGHT_TO_BOTTOM_LEFT = "top_right_to_bottom_left"
+    TOP_TO_BOTTOM_RIGHT = "top_to_bottom_right"
+    TOP_TO_BOTTOM_LEFT = "top_to_bottom_left"
+    CURVED = "curved"
 
 
 class CopybookGenerator:
@@ -100,6 +141,8 @@ class CopybookGenerator:
     def _load_stroke_data(self):
         """加载笔画数据"""
         self.stroke_data = {}
+        self.detailed_stroke_data = self._get_default_stroke_data()
+        
         stroke_data_path = Path(__file__).parent / "stroke_data" / "strokes.json"
         
         if stroke_data_path.exists():
@@ -108,6 +151,342 @@ class CopybookGenerator:
                     self.stroke_data = json.load(f)
             except Exception as e:
                 print(f"加载笔画数据失败: {e}")
+    
+    def _get_default_stroke_data(self) -> Dict[str, List[Dict[str, Any]]]:
+        """
+        获取默认的详细笔画数据
+        
+        Returns:
+            Dict[str, List[Dict]]: 汉字到详细笔画列表的映射
+        """
+        return {
+            "一": [
+                {"type": StrokeType.HENG, "direction": StrokeDirection.LEFT_TO_RIGHT, 
+                 "start_x": 0.2, "start_y": 0.5, "end_x": 0.8, "end_y": 0.5, "order": 1}
+            ],
+            "二": [
+                {"type": StrokeType.HENG, "direction": StrokeDirection.LEFT_TO_RIGHT, 
+                 "start_x": 0.25, "start_y": 0.65, "end_x": 0.75, "end_y": 0.65, "order": 1},
+                {"type": StrokeType.HENG, "direction": StrokeDirection.LEFT_TO_RIGHT, 
+                 "start_x": 0.15, "start_y": 0.35, "end_x": 0.85, "end_y": 0.35, "order": 2}
+            ],
+            "三": [
+                {"type": StrokeType.HENG, "direction": StrokeDirection.LEFT_TO_RIGHT, 
+                 "start_x": 0.25, "start_y": 0.7, "end_x": 0.75, "end_y": 0.7, "order": 1},
+                {"type": StrokeType.HENG, "direction": StrokeDirection.LEFT_TO_RIGHT, 
+                 "start_x": 0.3, "start_y": 0.5, "end_x": 0.7, "end_y": 0.5, "order": 2},
+                {"type": StrokeType.HENG, "direction": StrokeDirection.LEFT_TO_RIGHT, 
+                 "start_x": 0.15, "start_y": 0.3, "end_x": 0.85, "end_y": 0.3, "order": 3}
+            ],
+            "十": [
+                {"type": StrokeType.HENG, "direction": StrokeDirection.LEFT_TO_RIGHT, 
+                 "start_x": 0.15, "start_y": 0.5, "end_x": 0.85, "end_y": 0.5, "order": 1},
+                {"type": StrokeType.SHU, "direction": StrokeDirection.TOP_TO_BOTTOM, 
+                 "start_x": 0.5, "start_y": 0.85, "end_x": 0.5, "end_y": 0.15, "order": 2}
+            ],
+            "人": [
+                {"type": StrokeType.PIE, "direction": StrokeDirection.TOP_LEFT_TO_BOTTOM_RIGHT, 
+                 "start_x": 0.5, "start_y": 0.85, "end_x": 0.15, "end_y": 0.15, "order": 1},
+                {"type": StrokeType.NA, "direction": StrokeDirection.TOP_LEFT_TO_BOTTOM_RIGHT, 
+                 "start_x": 0.5, "start_y": 0.85, "end_x": 0.85, "end_y": 0.15, "order": 2}
+            ],
+            "大": [
+                {"type": StrokeType.HENG, "direction": StrokeDirection.LEFT_TO_RIGHT, 
+                 "start_x": 0.2, "start_y": 0.65, "end_x": 0.8, "end_y": 0.65, "order": 1},
+                {"type": StrokeType.PIE, "direction": StrokeDirection.TOP_LEFT_TO_BOTTOM_RIGHT, 
+                 "start_x": 0.5, "start_y": 0.85, "end_x": 0.2, "end_y": 0.2, "order": 2},
+                {"type": StrokeType.NA, "direction": StrokeDirection.TOP_LEFT_TO_BOTTOM_RIGHT, 
+                 "start_x": 0.5, "start_y": 0.85, "end_x": 0.8, "end_y": 0.15, "order": 3}
+            ],
+            "天": [
+                {"type": StrokeType.HENG, "direction": StrokeDirection.LEFT_TO_RIGHT, 
+                 "start_x": 0.25, "start_y": 0.75, "end_x": 0.75, "end_y": 0.75, "order": 1},
+                {"type": StrokeType.HENG, "direction": StrokeDirection.LEFT_TO_RIGHT, 
+                 "start_x": 0.2, "start_y": 0.55, "end_x": 0.8, "end_y": 0.55, "order": 2},
+                {"type": StrokeType.PIE, "direction": StrokeDirection.TOP_LEFT_TO_BOTTOM_RIGHT, 
+                 "start_x": 0.5, "start_y": 0.75, "end_x": 0.2, "end_y": 0.15, "order": 3},
+                {"type": StrokeType.NA, "direction": StrokeDirection.TOP_LEFT_TO_BOTTOM_RIGHT, 
+                 "start_x": 0.5, "start_y": 0.75, "end_x": 0.8, "end_y": 0.15, "order": 4}
+            ],
+            "永": [
+                {"type": StrokeType.DIAN, "direction": StrokeDirection.TOP_LEFT_TO_BOTTOM_RIGHT, 
+                 "start_x": 0.5, "start_y": 0.9, "end_x": 0.45, "end_y": 0.8, "order": 1},
+                {"type": StrokeType.HENG_ZHE_GOU, "direction": StrokeDirection.CURVED, 
+                 "start_x": 0.3, "start_y": 0.75, "end_x": 0.7, "end_y": 0.75, "order": 2},
+                {"type": StrokeType.HENG_PIE, "direction": StrokeDirection.TOP_LEFT_TO_BOTTOM_RIGHT, 
+                 "start_x": 0.35, "start_y": 0.55, "end_x": 0.25, "end_y": 0.35, "order": 3},
+                {"type": StrokeType.PIE, "direction": StrokeDirection.TOP_LEFT_TO_BOTTOM_RIGHT, 
+                 "start_x": 0.5, "start_y": 0.55, "end_x": 0.35, "end_y": 0.2, "order": 4},
+                {"type": StrokeType.NA, "direction": StrokeDirection.TOP_LEFT_TO_BOTTOM_RIGHT, 
+                 "start_x": 0.5, "start_y": 0.55, "end_x": 0.75, "end_y": 0.15, "order": 5}
+            ],
+            "木": [
+                {"type": StrokeType.HENG, "direction": StrokeDirection.LEFT_TO_RIGHT, 
+                 "start_x": 0.2, "start_y": 0.65, "end_x": 0.8, "end_y": 0.65, "order": 1},
+                {"type": StrokeType.SHU, "direction": StrokeDirection.TOP_TO_BOTTOM, 
+                 "start_x": 0.5, "start_y": 0.85, "end_x": 0.5, "end_y": 0.15, "order": 2},
+                {"type": StrokeType.PIE, "direction": StrokeDirection.TOP_LEFT_TO_BOTTOM_RIGHT, 
+                 "start_x": 0.5, "start_y": 0.5, "end_x": 0.2, "end_y": 0.2, "order": 3},
+                {"type": StrokeType.NA, "direction": StrokeDirection.TOP_LEFT_TO_BOTTOM_RIGHT, 
+                 "start_x": 0.5, "start_y": 0.5, "end_x": 0.8, "end_y": 0.15, "order": 4}
+            ],
+            "日": [
+                {"type": StrokeType.SHU, "direction": StrokeDirection.TOP_TO_BOTTOM, 
+                 "start_x": 0.25, "start_y": 0.85, "end_x": 0.25, "end_y": 0.15, "order": 1},
+                {"type": StrokeType.HENG_ZHE, "direction": StrokeDirection.CURVED, 
+                 "start_x": 0.25, "start_y": 0.85, "end_x": 0.75, "end_y": 0.15, "order": 2},
+                {"type": StrokeType.HENG, "direction": StrokeDirection.LEFT_TO_RIGHT, 
+                 "start_x": 0.25, "start_y": 0.5, "end_x": 0.75, "end_y": 0.5, "order": 3},
+                {"type": StrokeType.HENG, "direction": StrokeDirection.LEFT_TO_RIGHT, 
+                 "start_x": 0.25, "start_y": 0.15, "end_x": 0.75, "end_y": 0.15, "order": 4}
+            ],
+            "月": [
+                {"type": StrokeType.PIE, "direction": StrokeDirection.TOP_LEFT_TO_BOTTOM_RIGHT, 
+                 "start_x": 0.35, "start_y": 0.85, "end_x": 0.15, "end_y": 0.15, "order": 1},
+                {"type": StrokeType.HENG_ZHE_GOU, "direction": StrokeDirection.CURVED, 
+                 "start_x": 0.35, "start_y": 0.85, "end_x": 0.85, "end_y": 0.15, "order": 2},
+                {"type": StrokeType.HENG, "direction": StrokeDirection.LEFT_TO_RIGHT, 
+                 "start_x": 0.35, "start_y": 0.55, "end_x": 0.75, "end_y": 0.55, "order": 3},
+                {"type": StrokeType.HENG, "direction": StrokeDirection.LEFT_TO_RIGHT, 
+                 "start_x": 0.35, "start_y": 0.35, "end_x": 0.75, "end_y": 0.35, "order": 4}
+            ],
+            "水": [
+                {"type": StrokeType.SHU_GOU, "direction": StrokeDirection.TOP_TO_BOTTOM, 
+                 "start_x": 0.5, "start_y": 0.85, "end_x": 0.5, "end_y": 0.15, "order": 1},
+                {"type": StrokeType.HENG_PIE, "direction": StrokeDirection.TOP_LEFT_TO_BOTTOM_RIGHT, 
+                 "start_x": 0.35, "start_y": 0.6, "end_x": 0.2, "end_y": 0.4, "order": 2},
+                {"type": StrokeType.PIE, "direction": StrokeDirection.TOP_LEFT_TO_BOTTOM_RIGHT, 
+                 "start_x": 0.5, "start_y": 0.5, "end_x": 0.3, "end_y": 0.25, "order": 3},
+                {"type": StrokeType.NA, "direction": StrokeDirection.TOP_LEFT_TO_BOTTOM_RIGHT, 
+                 "start_x": 0.5, "start_y": 0.5, "end_x": 0.75, "end_y": 0.15, "order": 4}
+            ],
+            "火": [
+                {"type": StrokeType.DIAN, "direction": StrokeDirection.TOP_LEFT_TO_BOTTOM_RIGHT, 
+                 "start_x": 0.35, "start_y": 0.8, "end_x": 0.3, "end_y": 0.7, "order": 1},
+                {"type": StrokeType.PIE, "direction": StrokeDirection.TOP_LEFT_TO_BOTTOM_RIGHT, 
+                 "start_x": 0.5, "start_y": 0.85, "end_x": 0.25, "end_y": 0.35, "order": 2},
+                {"type": StrokeType.PIE, "direction": StrokeDirection.TOP_LEFT_TO_BOTTOM_RIGHT, 
+                 "start_x": 0.6, "start_y": 0.65, "end_x": 0.45, "end_y": 0.25, "order": 3},
+                {"type": StrokeType.NA, "direction": StrokeDirection.TOP_LEFT_TO_BOTTOM_RIGHT, 
+                 "start_x": 0.5, "start_y": 0.65, "end_x": 0.8, "end_y": 0.15, "order": 4}
+            ],
+            "山": [
+                {"type": StrokeType.SHU, "direction": StrokeDirection.TOP_TO_BOTTOM, 
+                 "start_x": 0.5, "start_y": 0.85, "end_x": 0.5, "end_y": 0.2, "order": 1},
+                {"type": StrokeType.SHU_ZHE, "direction": StrokeDirection.CURVED, 
+                 "start_x": 0.5, "start_y": 0.65, "end_x": 0.15, "end_y": 0.2, "order": 2},
+                {"type": StrokeType.SHU, "direction": StrokeDirection.TOP_TO_BOTTOM, 
+                 "start_x": 0.85, "start_y": 0.65, "end_x": 0.85, "end_y": 0.2, "order": 3}
+            ],
+            "田": [
+                {"type": StrokeType.SHU, "direction": StrokeDirection.TOP_TO_BOTTOM, 
+                 "start_x": 0.2, "start_y": 0.85, "end_x": 0.2, "end_y": 0.15, "order": 1},
+                {"type": StrokeType.HENG_ZHE, "direction": StrokeDirection.CURVED, 
+                 "start_x": 0.2, "start_y": 0.85, "end_x": 0.8, "end_y": 0.15, "order": 2},
+                {"type": StrokeType.HENG, "direction": StrokeDirection.LEFT_TO_RIGHT, 
+                 "start_x": 0.2, "start_y": 0.5, "end_x": 0.8, "end_y": 0.5, "order": 3},
+                {"type": StrokeType.SHU, "direction": StrokeDirection.TOP_TO_BOTTOM, 
+                 "start_x": 0.5, "start_y": 0.85, "end_x": 0.5, "end_y": 0.15, "order": 4},
+                {"type": StrokeType.HENG, "direction": StrokeDirection.LEFT_TO_RIGHT, 
+                 "start_x": 0.2, "start_y": 0.15, "end_x": 0.8, "end_y": 0.15, "order": 5}
+            ],
+            "王": [
+                {"type": StrokeType.HENG, "direction": StrokeDirection.LEFT_TO_RIGHT, 
+                 "start_x": 0.25, "start_y": 0.8, "end_x": 0.75, "end_y": 0.8, "order": 1},
+                {"type": StrokeType.HENG, "direction": StrokeDirection.LEFT_TO_RIGHT, 
+                 "start_x": 0.3, "start_y": 0.55, "end_x": 0.7, "end_y": 0.55, "order": 2},
+                {"type": StrokeType.SHU, "direction": StrokeDirection.TOP_TO_BOTTOM, 
+                 "start_x": 0.5, "start_y": 0.8, "end_x": 0.5, "end_y": 0.2, "order": 3},
+                {"type": StrokeType.HENG, "direction": StrokeDirection.LEFT_TO_RIGHT, 
+                 "start_x": 0.2, "start_y": 0.2, "end_x": 0.8, "end_y": 0.2, "order": 4}
+            ],
+            "土": [
+                {"type": StrokeType.HENG, "direction": StrokeDirection.LEFT_TO_RIGHT, 
+                 "start_x": 0.25, "start_y": 0.7, "end_x": 0.75, "end_y": 0.7, "order": 1},
+                {"type": StrokeType.SHU, "direction": StrokeDirection.TOP_TO_BOTTOM, 
+                 "start_x": 0.5, "start_y": 0.7, "end_x": 0.5, "end_y": 0.35, "order": 2},
+                {"type": StrokeType.HENG, "direction": StrokeDirection.LEFT_TO_RIGHT, 
+                 "start_x": 0.2, "start_y": 0.2, "end_x": 0.8, "end_y": 0.2, "order": 3}
+            ],
+            "女": [
+                {"type": StrokeType.PIE_DIAN, "direction": StrokeDirection.TOP_LEFT_TO_BOTTOM_RIGHT, 
+                 "start_x": 0.5, "start_y": 0.7, "end_x": 0.25, "end_y": 0.35, "order": 1},
+                {"type": StrokeType.PIE, "direction": StrokeDirection.TOP_LEFT_TO_BOTTOM_RIGHT, 
+                 "start_x": 0.5, "start_y": 0.7, "end_x": 0.7, "end_y": 0.35, "order": 2},
+                {"type": StrokeType.HENG, "direction": StrokeDirection.LEFT_TO_RIGHT, 
+                 "start_x": 0.2, "start_y": 0.35, "end_x": 0.8, "end_y": 0.35, "order": 3}
+            ],
+            "子": [
+                {"type": StrokeType.HENG_PIE, "direction": StrokeDirection.TOP_LEFT_TO_BOTTOM_RIGHT, 
+                 "start_x": 0.3, "start_y": 0.75, "end_x": 0.2, "end_y": 0.55, "order": 1},
+                {"type": StrokeType.WAN_GOU, "direction": StrokeDirection.CURVED, 
+                 "start_x": 0.5, "start_y": 0.75, "end_x": 0.5, "end_y": 0.2, "order": 2},
+                {"type": StrokeType.HENG, "direction": StrokeDirection.LEFT_TO_RIGHT, 
+                 "start_x": 0.2, "start_y": 0.3, "end_x": 0.8, "end_y": 0.3, "order": 3}
+            ],
+            "马": [
+                {"type": StrokeType.HENG_ZHE, "direction": StrokeDirection.CURVED, 
+                 "start_x": 0.25, "start_y": 0.8, "end_x": 0.75, "end_y": 0.55, "order": 1},
+                {"type": StrokeType.SHU_ZHE_ZHE_GOU, "direction": StrokeDirection.CURVED, 
+                 "start_x": 0.5, "start_y": 0.8, "end_x": 0.5, "end_y": 0.2, "order": 2},
+                {"type": StrokeType.HENG, "direction": StrokeDirection.LEFT_TO_RIGHT, 
+                 "start_x": 0.25, "start_y": 0.2, "end_x": 0.75, "end_y": 0.2, "order": 3}
+            ],
+            "牛": [
+                {"type": StrokeType.PIE, "direction": StrokeDirection.TOP_LEFT_TO_BOTTOM_RIGHT, 
+                 "start_x": 0.5, "start_y": 0.85, "end_x": 0.25, "end_y": 0.55, "order": 1},
+                {"type": StrokeType.HENG, "direction": StrokeDirection.LEFT_TO_RIGHT, 
+                 "start_x": 0.2, "start_y": 0.65, "end_x": 0.8, "end_y": 0.65, "order": 2},
+                {"type": StrokeType.HENG, "direction": StrokeDirection.LEFT_TO_RIGHT, 
+                 "start_x": 0.25, "start_y": 0.45, "end_x": 0.75, "end_y": 0.45, "order": 3},
+                {"type": StrokeType.SHU, "direction": StrokeDirection.TOP_TO_BOTTOM, 
+                 "start_x": 0.5, "start_y": 0.85, "end_x": 0.5, "end_y": 0.15, "order": 4}
+            ],
+            "羊": [
+                {"type": StrokeType.DIAN, "direction": StrokeDirection.TOP_LEFT_TO_BOTTOM_RIGHT, 
+                 "start_x": 0.35, "start_y": 0.9, "end_x": 0.3, "end_y": 0.8, "order": 1},
+                {"type": StrokeType.PIE, "direction": StrokeDirection.TOP_LEFT_TO_BOTTOM_RIGHT, 
+                 "start_x": 0.5, "start_y": 0.9, "end_x": 0.3, "end_y": 0.6, "order": 2},
+                {"type": StrokeType.HENG, "direction": StrokeDirection.LEFT_TO_RIGHT, 
+                 "start_x": 0.25, "start_y": 0.7, "end_x": 0.75, "end_y": 0.7, "order": 3},
+                {"type": StrokeType.HENG, "direction": StrokeDirection.LEFT_TO_RIGHT, 
+                 "start_x": 0.3, "start_y": 0.5, "end_x": 0.7, "end_y": 0.5, "order": 4},
+                {"type": StrokeType.HENG, "direction": StrokeDirection.LEFT_TO_RIGHT, 
+                 "start_x": 0.2, "start_y": 0.3, "end_x": 0.8, "end_y": 0.3, "order": 5},
+                {"type": StrokeType.SHU, "direction": StrokeDirection.TOP_TO_BOTTOM, 
+                 "start_x": 0.5, "start_y": 0.9, "end_x": 0.5, "end_y": 0.15, "order": 6}
+            ],
+            "鸟": [
+                {"type": StrokeType.PIE, "direction": StrokeDirection.TOP_LEFT_TO_BOTTOM_RIGHT, 
+                 "start_x": 0.5, "start_y": 0.9, "end_x": 0.3, "end_y": 0.65, "order": 1},
+                {"type": StrokeType.HENG_ZHE_GOU, "direction": StrokeDirection.CURVED, 
+                 "start_x": 0.35, "start_y": 0.9, "end_x": 0.8, "end_y": 0.5, "order": 2},
+                {"type": StrokeType.DIAN, "direction": StrokeDirection.TOP_LEFT_TO_BOTTOM_RIGHT, 
+                 "start_x": 0.6, "start_y": 0.7, "end_x": 0.55, "end_y": 0.6, "order": 3},
+                {"type": StrokeType.SHU_ZHE_ZHE_GOU, "direction": StrokeDirection.CURVED, 
+                 "start_x": 0.5, "start_y": 0.5, "end_x": 0.5, "end_y": 0.15, "order": 4},
+                {"type": StrokeType.HENG, "direction": StrokeDirection.LEFT_TO_RIGHT, 
+                 "start_x": 0.35, "start_y": 0.35, "end_x": 0.65, "end_y": 0.35, "order": 5}
+            ],
+            "心": [
+                {"type": StrokeType.DIAN, "direction": StrokeDirection.TOP_LEFT_TO_BOTTOM_RIGHT, 
+                 "start_x": 0.25, "start_y": 0.6, "end_x": 0.2, "end_y": 0.5, "order": 1},
+                {"type": StrokeType.WO_GOU, "direction": StrokeDirection.CURVED, 
+                 "start_x": 0.3, "start_y": 0.5, "end_x": 0.7, "end_y": 0.25, "order": 2},
+                {"type": StrokeType.DIAN, "direction": StrokeDirection.TOP_LEFT_TO_BOTTOM_RIGHT, 
+                 "start_x": 0.6, "start_y": 0.5, "end_x": 0.55, "end_y": 0.4, "order": 3},
+                {"type": StrokeType.DIAN, "direction": StrokeDirection.TOP_LEFT_TO_BOTTOM_RIGHT, 
+                 "start_x": 0.75, "start_y": 0.6, "end_x": 0.7, "end_y": 0.5, "order": 4}
+            ],
+            "手": [
+                {"type": StrokeType.PIE, "direction": StrokeDirection.TOP_LEFT_TO_BOTTOM_RIGHT, 
+                 "start_x": 0.5, "start_y": 0.9, "end_x": 0.3, "end_y": 0.65, "order": 1},
+                {"type": StrokeType.HENG, "direction": StrokeDirection.LEFT_TO_RIGHT, 
+                 "start_x": 0.2, "start_y": 0.7, "end_x": 0.8, "end_y": 0.7, "order": 2},
+                {"type": StrokeType.HENG, "direction": StrokeDirection.LEFT_TO_RIGHT, 
+                 "start_x": 0.25, "start_y": 0.45, "end_x": 0.75, "end_y": 0.45, "order": 3},
+                {"type": StrokeType.SHU_GOU, "direction": StrokeDirection.TOP_TO_BOTTOM, 
+                 "start_x": 0.5, "start_y": 0.9, "end_x": 0.5, "end_y": 0.2, "order": 4}
+            ],
+            "耳": [
+                {"type": StrokeType.HENG, "direction": StrokeDirection.LEFT_TO_RIGHT, 
+                 "start_x": 0.25, "start_y": 0.85, "end_x": 0.75, "end_y": 0.85, "order": 1},
+                {"type": StrokeType.SHU, "direction": StrokeDirection.TOP_TO_BOTTOM, 
+                 "start_x": 0.25, "start_y": 0.85, "end_x": 0.25, "end_y": 0.15, "order": 2},
+                {"type": StrokeType.SHU, "direction": StrokeDirection.TOP_TO_BOTTOM, 
+                 "start_x": 0.75, "start_y": 0.85, "end_x": 0.75, "end_y": 0.15, "order": 3},
+                {"type": StrokeType.HENG, "direction": StrokeDirection.LEFT_TO_RIGHT, 
+                 "start_x": 0.25, "start_y": 0.65, "end_x": 0.75, "end_y": 0.65, "order": 4},
+                {"type": StrokeType.HENG, "direction": StrokeDirection.LEFT_TO_RIGHT, 
+                 "start_x": 0.25, "start_y": 0.4, "end_x": 0.75, "end_y": 0.4, "order": 5},
+                {"type": StrokeType.HENG, "direction": StrokeDirection.LEFT_TO_RIGHT, 
+                 "start_x": 0.25, "start_y": 0.15, "end_x": 0.75, "end_y": 0.15, "order": 6}
+            ],
+            "目": [
+                {"type": StrokeType.SHU, "direction": StrokeDirection.TOP_TO_BOTTOM, 
+                 "start_x": 0.2, "start_y": 0.85, "end_x": 0.2, "end_y": 0.15, "order": 1},
+                {"type": StrokeType.HENG_ZHE, "direction": StrokeDirection.CURVED, 
+                 "start_x": 0.2, "start_y": 0.85, "end_x": 0.8, "end_y": 0.15, "order": 2},
+                {"type": StrokeType.HENG, "direction": StrokeDirection.LEFT_TO_RIGHT, 
+                 "start_x": 0.2, "start_y": 0.65, "end_x": 0.8, "end_y": 0.65, "order": 3},
+                {"type": StrokeType.HENG, "direction": StrokeDirection.LEFT_TO_RIGHT, 
+                 "start_x": 0.2, "start_y": 0.45, "end_x": 0.8, "end_y": 0.45, "order": 4},
+                {"type": StrokeType.HENG, "direction": StrokeDirection.LEFT_TO_RIGHT, 
+                 "start_x": 0.2, "start_y": 0.15, "end_x": 0.8, "end_y": 0.15, "order": 5}
+            ],
+            "小": [
+                {"type": StrokeType.SHU_GOU, "direction": StrokeDirection.TOP_TO_BOTTOM, 
+                 "start_x": 0.5, "start_y": 0.85, "end_x": 0.5, "end_y": 0.2, "order": 1},
+                {"type": StrokeType.PIE, "direction": StrokeDirection.TOP_LEFT_TO_BOTTOM_RIGHT, 
+                 "start_x": 0.5, "start_y": 0.5, "end_x": 0.25, "end_y": 0.25, "order": 2},
+                {"type": StrokeType.DIAN, "direction": StrokeDirection.TOP_LEFT_TO_BOTTOM_RIGHT, 
+                 "start_x": 0.5, "start_y": 0.5, "end_x": 0.75, "end_y": 0.25, "order": 3}
+            ],
+            "多": [
+                {"type": StrokeType.PIE, "direction": StrokeDirection.TOP_LEFT_TO_BOTTOM_RIGHT, 
+                 "start_x": 0.5, "start_y": 0.9, "end_x": 0.25, "end_y": 0.65, "order": 1},
+                {"type": StrokeType.HENG_PIE, "direction": StrokeDirection.TOP_LEFT_TO_BOTTOM_RIGHT, 
+                 "start_x": 0.35, "start_y": 0.75, "end_x": 0.25, "end_y": 0.5, "order": 2},
+                {"type": StrokeType.DIAN, "direction": StrokeDirection.TOP_LEFT_TO_BOTTOM_RIGHT, 
+                 "start_x": 0.5, "start_y": 0.65, "end_x": 0.55, "end_y": 0.55, "order": 3},
+                {"type": StrokeType.PIE, "direction": StrokeDirection.TOP_LEFT_TO_BOTTOM_RIGHT, 
+                 "start_x": 0.5, "start_y": 0.5, "end_x": 0.25, "end_y": 0.2, "order": 4},
+                {"type": StrokeType.HENG_PIE, "direction": StrokeDirection.TOP_LEFT_TO_BOTTOM_RIGHT, 
+                 "start_x": 0.35, "start_y": 0.35, "end_x": 0.25, "end_y": 0.15, "order": 5},
+                {"type": StrokeType.DIAN, "direction": StrokeDirection.TOP_LEFT_TO_BOTTOM_RIGHT, 
+                 "start_x": 0.5, "start_y": 0.25, "end_x": 0.55, "end_y": 0.15, "order": 6}
+            ],
+            "少": [
+                {"type": StrokeType.SHU, "direction": StrokeDirection.TOP_TO_BOTTOM, 
+                 "start_x": 0.5, "start_y": 0.85, "end_x": 0.5, "end_y": 0.4, "order": 1},
+                {"type": StrokeType.PIE, "direction": StrokeDirection.TOP_LEFT_TO_BOTTOM_RIGHT, 
+                 "start_x": 0.5, "start_y": 0.6, "end_x": 0.3, "end_y": 0.35, "order": 2},
+                {"type": StrokeType.DIAN, "direction": StrokeDirection.TOP_LEFT_TO_BOTTOM_RIGHT, 
+                 "start_x": 0.5, "start_y": 0.4, "end_x": 0.65, "end_y": 0.25, "order": 3},
+                {"type": StrokeType.PIE, "direction": StrokeDirection.TOP_LEFT_TO_BOTTOM_RIGHT, 
+                 "start_x": 0.7, "start_y": 0.7, "end_x": 0.55, "end_y": 0.45, "order": 4}
+            ],
+            "上": [
+                {"type": StrokeType.SHU, "direction": StrokeDirection.TOP_TO_BOTTOM, 
+                 "start_x": 0.5, "start_y": 0.85, "end_x": 0.5, "end_y": 0.4, "order": 1},
+                {"type": StrokeType.HENG, "direction": StrokeDirection.LEFT_TO_RIGHT, 
+                 "start_x": 0.25, "start_y": 0.65, "end_x": 0.75, "end_y": 0.65, "order": 2},
+                {"type": StrokeType.HENG, "direction": StrokeDirection.LEFT_TO_RIGHT, 
+                 "start_x": 0.2, "start_y": 0.2, "end_x": 0.8, "end_y": 0.2, "order": 3}
+            ],
+            "下": [
+                {"type": StrokeType.HENG, "direction": StrokeDirection.LEFT_TO_RIGHT, 
+                 "start_x": 0.2, "start_y": 0.8, "end_x": 0.8, "end_y": 0.8, "order": 1},
+                {"type": StrokeType.SHU, "direction": StrokeDirection.TOP_TO_BOTTOM, 
+                 "start_x": 0.5, "start_y": 0.8, "end_x": 0.5, "end_y": 0.3, "order": 2},
+                {"type": StrokeType.DIAN, "direction": StrokeDirection.TOP_LEFT_TO_BOTTOM_RIGHT, 
+                 "start_x": 0.5, "start_y": 0.5, "end_x": 0.65, "end_y": 0.35, "order": 3}
+            ],
+            "左": [
+                {"type": StrokeType.HENG, "direction": StrokeDirection.LEFT_TO_RIGHT, 
+                 "start_x": 0.25, "start_y": 0.8, "end_x": 0.75, "end_y": 0.8, "order": 1},
+                {"type": StrokeType.PIE, "direction": StrokeDirection.TOP_LEFT_TO_BOTTOM_RIGHT, 
+                 "start_x": 0.5, "start_y": 0.8, "end_x": 0.2, "end_y": 0.3, "order": 2},
+                {"type": StrokeType.HENG, "direction": StrokeDirection.LEFT_TO_RIGHT, 
+                 "start_x": 0.3, "start_y": 0.5, "end_x": 0.7, "end_y": 0.5, "order": 3},
+                {"type": StrokeType.SHU, "direction": StrokeDirection.TOP_TO_BOTTOM, 
+                 "start_x": 0.5, "start_y": 0.5, "end_x": 0.5, "end_y": 0.2, "order": 4},
+                {"type": StrokeType.HENG, "direction": StrokeDirection.LEFT_TO_RIGHT, 
+                 "start_x": 0.3, "start_y": 0.2, "end_x": 0.7, "end_y": 0.2, "order": 5}
+            ],
+            "右": [
+                {"type": StrokeType.HENG, "direction": StrokeDirection.LEFT_TO_RIGHT, 
+                 "start_x": 0.25, "start_y": 0.8, "end_x": 0.75, "end_y": 0.8, "order": 1},
+                {"type": StrokeType.PIE, "direction": StrokeDirection.TOP_LEFT_TO_BOTTOM_RIGHT, 
+                 "start_x": 0.5, "start_y": 0.8, "end_x": 0.25, "end_y": 0.4, "order": 2},
+                {"type": StrokeType.SHU, "direction": StrokeDirection.TOP_TO_BOTTOM, 
+                 "start_x": 0.5, "start_y": 0.6, "end_x": 0.5, "end_y": 0.2, "order": 3},
+                {"type": StrokeType.HENG_ZHE, "direction": StrokeDirection.CURVED, 
+                 "start_x": 0.5, "start_y": 0.6, "end_x": 0.8, "end_y": 0.2, "order": 4},
+                {"type": StrokeType.HENG, "direction": StrokeDirection.LEFT_TO_RIGHT, 
+                 "start_x": 0.5, "start_y": 0.2, "end_x": 0.8, "end_y": 0.2, "order": 5}
+            ]
+        }
     
     def validate_input(self, character: str) -> Tuple[bool, str]:
         """
@@ -129,6 +508,47 @@ class CopybookGenerator:
             return False, "输入不是有效的汉字"
         
         return True, ""
+    
+    def _draw_arrow(self, c: canvas.Canvas, 
+                    start_x: float, start_y: float, 
+                    end_x: float, end_y: float, 
+                    color: Color = red, 
+                    line_width: float = 2,
+                    arrow_size: float = 6):
+        """
+        绘制箭头
+        
+        Args:
+            c: PDF画布对象
+            start_x: 起点x坐标
+            start_y: 起点y坐标
+            end_x: 终点x坐标
+            end_y: 终点y坐标
+            color: 箭头颜色
+            line_width: 线宽
+            arrow_size: 箭头大小
+        """
+        c.setStrokeColor(color)
+        c.setLineWidth(line_width)
+        
+        c.line(start_x, start_y, end_x, end_y)
+        
+        angle = math.atan2(end_y - start_y, end_x - start_x)
+        arrow_angle = math.pi / 6
+        
+        arrow_x1 = end_x - arrow_size * math.cos(angle - arrow_angle)
+        arrow_y1 = end_y - arrow_size * math.sin(angle - arrow_angle)
+        
+        arrow_x2 = end_x - arrow_size * math.cos(angle + arrow_angle)
+        arrow_y2 = end_y - arrow_size * math.sin(angle + arrow_angle)
+        
+        c.setFillColor(color)
+        p = c.beginPath()
+        p.moveTo(end_x, end_y)
+        p.lineTo(arrow_x1, arrow_y1)
+        p.lineTo(arrow_x2, arrow_y2)
+        p.close()
+        c.drawPath(p, fill=1, stroke=0)
     
     def _draw_grid(self, c: canvas.Canvas, x: float, y: float, 
                    is_stroke_demo: bool = False, 
@@ -176,18 +596,42 @@ class CopybookGenerator:
             
             c.drawString(text_x, text_y, character)
             
-            strokes = self.stroke_data.get(character, [])
+            strokes = self.detailed_stroke_data.get(character, [])
             if strokes:
-                num_strokes = len(strokes)
-                
-                positions = self._get_stroke_positions(x, y, grid_size, num_strokes)
-                
-                for i, (pos_x, pos_y) in enumerate(positions):
-                    c.setFillColor(red)
-                    c.setFont("Helvetica-Bold", 14)
-                    order_text = f"{i+1}"
-                    order_width = c.stringWidth(order_text, "Helvetica-Bold", 14)
-                    c.drawString(pos_x - order_width/2, pos_y, order_text)
+                for stroke in strokes:
+                    start_x = x + stroke["start_x"] * grid_size
+                    start_y = y + stroke["start_y"] * grid_size
+                    end_x = x + stroke["end_x"] * grid_size
+                    end_y = y + stroke["end_y"] * grid_size
+                    
+                    self._draw_arrow(c, start_x, start_y, end_x, end_y, color=red)
+                    
+                    mid_x = (start_x + end_x) / 2
+                    mid_y = (start_y + end_y) / 2
+                    
+                    c.setFillColor(blue)
+                    c.setFont("Helvetica-Bold", 10)
+                    order_text = f"{stroke['order']}"
+                    order_width = c.stringWidth(order_text, "Helvetica-Bold", 10)
+                    
+                    label_offset = 8
+                    if stroke["direction"] == StrokeDirection.LEFT_TO_RIGHT:
+                        label_x = mid_x - order_width / 2
+                        label_y = mid_y + label_offset
+                    elif stroke["direction"] == StrokeDirection.TOP_TO_BOTTOM:
+                        label_x = mid_x + label_offset
+                        label_y = mid_y - 5
+                    elif stroke["direction"] == StrokeDirection.TOP_LEFT_TO_BOTTOM_RIGHT:
+                        label_x = mid_x + label_offset
+                        label_y = mid_y - label_offset
+                    elif stroke["direction"] == StrokeDirection.TOP_RIGHT_TO_BOTTOM_LEFT:
+                        label_x = mid_x - label_offset - order_width
+                        label_y = mid_y - label_offset
+                    else:
+                        label_x = mid_x - order_width / 2
+                        label_y = mid_y + label_offset
+                    
+                    c.drawString(label_x, label_y, order_text)
             
             c.setStrokeColor(gray)
             c.setLineWidth(1)
@@ -209,55 +653,6 @@ class CopybookGenerator:
             c.setStrokeColor(gray)
             c.setLineWidth(1)
             c.rect(x, y, grid_size, grid_size)
-    
-    def _get_stroke_positions(self, x: float, y: float, grid_size: float, num_strokes: int) -> List[Tuple[float, float]]:
-        """
-        获取笔画编号在田字格中的位置
-        
-        Args:
-            x: 田字格左下角x坐标
-            y: 田字格左下角y坐标
-            grid_size: 田字格大小
-            num_strokes: 笔画数量
-            
-        Returns:
-            List[Tuple[float, float]]: 每个笔画编号的位置列表
-        """
-        positions = []
-        center_x = x + grid_size / 2
-        center_y = y + grid_size / 2
-        
-        if num_strokes == 1:
-            positions.append((center_x, center_y))
-        elif num_strokes == 2:
-            positions.append((center_x - grid_size * 0.2, center_y + grid_size * 0.2))
-            positions.append((center_x + grid_size * 0.2, center_y - grid_size * 0.2))
-        elif num_strokes == 3:
-            positions.append((center_x, center_y + grid_size * 0.25))
-            positions.append((center_x - grid_size * 0.25, center_y))
-            positions.append((center_x + grid_size * 0.25, center_y))
-        elif num_strokes == 4:
-            positions.append((center_x - grid_size * 0.25, center_y + grid_size * 0.25))
-            positions.append((center_x + grid_size * 0.25, center_y + grid_size * 0.25))
-            positions.append((center_x - grid_size * 0.25, center_y - grid_size * 0.25))
-            positions.append((center_x + grid_size * 0.25, center_y - grid_size * 0.25))
-        elif num_strokes == 5:
-            positions.append((center_x, center_y + grid_size * 0.3))
-            positions.append((center_x - grid_size * 0.3, center_y + grid_size * 0.1))
-            positions.append((center_x + grid_size * 0.3, center_y + grid_size * 0.1))
-            positions.append((center_x - grid_size * 0.2, center_y - grid_size * 0.25))
-            positions.append((center_x + grid_size * 0.2, center_y - grid_size * 0.25))
-        else:
-            for i in range(num_strokes):
-                angle = (i / num_strokes) * 360
-                import math
-                rad = math.radians(angle)
-                radius = grid_size * 0.35
-                pos_x = center_x + math.cos(rad) * radius
-                pos_y = center_y + math.sin(rad) * radius
-                positions.append((pos_x, pos_y))
-        
-        return positions
     
     def _draw_page(self, c: canvas.Canvas, character: str, page_num: int):
         """
