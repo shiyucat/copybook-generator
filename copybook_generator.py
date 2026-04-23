@@ -513,10 +513,10 @@ class CopybookGenerator:
                     start_x: float, start_y: float, 
                     end_x: float, end_y: float, 
                     color: Color = red, 
-                    line_width: float = 2,
+                    line_width: float = 0.5,
                     arrow_size: float = 6):
         """
-        绘制箭头（只在终点画箭头，不画整条线）
+        绘制带箭头的细线，表示笔画走势
         
         Args:
             c: PDF画布对象
@@ -525,11 +525,13 @@ class CopybookGenerator:
             end_x: 终点x坐标
             end_y: 终点y坐标
             color: 箭头颜色
-            line_width: 线宽
+            line_width: 线宽（很细）
             arrow_size: 箭头大小
         """
         c.setStrokeColor(color)
         c.setLineWidth(line_width)
+        
+        c.line(start_x, start_y, end_x, end_y)
         
         c.setFillColor(color)
         p = c.beginPath()
@@ -625,15 +627,19 @@ class CopybookGenerator:
                     end_x = x + stroke["end_x"] * grid_size
                     end_y = y + stroke["end_y"] * grid_size
                     
+                    self._draw_start_marker(c, start_x, start_y, color=red, radius=3)
+                    
+                    self._draw_arrow(c, start_x, start_y, end_x, end_y, color=red, line_width=0.5, arrow_size=6)
+                    
                     mid_x = (start_x + end_x) / 2
                     mid_y = (start_y + end_y) / 2
                     
-                    c.setFillColor(red)
-                    c.setFont("Helvetica-Bold", 10)
+                    c.setFillColor(blue)
+                    c.setFont("Helvetica-Bold", 9)
                     order_text = f"{stroke['order']}"
-                    order_width = c.stringWidth(order_text, "Helvetica-Bold", 10)
+                    order_width = c.stringWidth(order_text, "Helvetica-Bold", 9)
                     
-                    label_offset = 12
+                    label_offset = 10
                     if stroke["direction"] == StrokeDirection.LEFT_TO_RIGHT:
                         label_x = end_x + label_offset / 2
                         label_y = mid_y - 3
