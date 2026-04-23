@@ -516,7 +516,7 @@ class CopybookGenerator:
                     line_width: float = 2,
                     arrow_size: float = 6):
         """
-        绘制箭头
+        绘制箭头（只在终点画箭头，不画整条线）
         
         Args:
             c: PDF画布对象
@@ -531,7 +531,9 @@ class CopybookGenerator:
         c.setStrokeColor(color)
         c.setLineWidth(line_width)
         
-        c.line(start_x, start_y, end_x, end_y)
+        c.setFillColor(color)
+        p = c.beginPath()
+        p.moveTo(end_x, end_y)
         
         angle = math.atan2(end_y - start_y, end_x - start_x)
         arrow_angle = math.pi / 6
@@ -542,12 +544,31 @@ class CopybookGenerator:
         arrow_x2 = end_x - arrow_size * math.cos(angle + arrow_angle)
         arrow_y2 = end_y - arrow_size * math.sin(angle + arrow_angle)
         
-        c.setFillColor(color)
-        p = c.beginPath()
-        p.moveTo(end_x, end_y)
         p.lineTo(arrow_x1, arrow_y1)
         p.lineTo(arrow_x2, arrow_y2)
         p.close()
+        c.drawPath(p, fill=1, stroke=0)
+    
+    def _draw_start_marker(self, c: canvas.Canvas, 
+                           x: float, y: float, 
+                           color: Color = red, 
+                           radius: float = 3):
+        """
+        绘制起点标记（小圆圈）
+        
+        Args:
+            c: PDF画布对象
+            x: 中心x坐标
+            y: 中心y坐标
+            color: 颜色
+            radius: 半径
+        """
+        c.setStrokeColor(color)
+        c.setFillColor(color)
+        c.setLineWidth(1)
+        
+        p = c.beginPath()
+        p.circle(x, y, radius)
         c.drawPath(p, fill=1, stroke=0)
     
     def _draw_grid(self, c: canvas.Canvas, x: float, y: float, 
@@ -604,32 +625,30 @@ class CopybookGenerator:
                     end_x = x + stroke["end_x"] * grid_size
                     end_y = y + stroke["end_y"] * grid_size
                     
-                    self._draw_arrow(c, start_x, start_y, end_x, end_y, color=red)
-                    
                     mid_x = (start_x + end_x) / 2
                     mid_y = (start_y + end_y) / 2
                     
-                    c.setFillColor(blue)
+                    c.setFillColor(red)
                     c.setFont("Helvetica-Bold", 10)
                     order_text = f"{stroke['order']}"
                     order_width = c.stringWidth(order_text, "Helvetica-Bold", 10)
                     
-                    label_offset = 8
+                    label_offset = 12
                     if stroke["direction"] == StrokeDirection.LEFT_TO_RIGHT:
-                        label_x = mid_x - order_width / 2
-                        label_y = mid_y + label_offset
+                        label_x = end_x + label_offset / 2
+                        label_y = mid_y - 3
                     elif stroke["direction"] == StrokeDirection.TOP_TO_BOTTOM:
-                        label_x = mid_x + label_offset
-                        label_y = mid_y - 5
+                        label_x = mid_x - order_width / 2
+                        label_y = end_y - label_offset
                     elif stroke["direction"] == StrokeDirection.TOP_LEFT_TO_BOTTOM_RIGHT:
-                        label_x = mid_x + label_offset
-                        label_y = mid_y - label_offset
+                        label_x = end_x + label_offset / 2
+                        label_y = end_y - label_offset / 2
                     elif stroke["direction"] == StrokeDirection.TOP_RIGHT_TO_BOTTOM_LEFT:
-                        label_x = mid_x - label_offset - order_width
-                        label_y = mid_y - label_offset
+                        label_x = end_x - label_offset - order_width
+                        label_y = end_y - label_offset / 2
                     else:
                         label_x = mid_x - order_width / 2
-                        label_y = mid_y + label_offset
+                        label_y = mid_y
                     
                     c.drawString(label_x, label_y, order_text)
             
