@@ -598,26 +598,104 @@ class ImprovedStrokeAnalyzer:
         return segments
     
     @staticmethod
-    def get_arrow_offset_for_direction(direction: str) -> Tuple[float, float]:
+    def get_perpendicular_direction(direction: Tuple[float, float]) -> Tuple[Tuple[float, float], Tuple[float, float]]:
         """
-        根据笔画方向获取箭头的偏移方向
+        获取笔画方向的两个垂直方向（法线方向）
         
         Args:
-            direction: 笔画方向
+            direction: 笔画方向向量 (dx, dy)
             
         Returns:
-            偏移向量 (dx, dy)，表示箭头应该相对于笔画中心线的偏移方向
+            两个垂直方向向量 (left_normal, right_normal)
         """
-        if direction == "horizontal":
-            return (0.0, 1.0)
-        elif direction == "vertical":
-            return (1.0, 0.0)
-        elif direction == "diagonal":
+        dx, dy = direction
+        length = math.sqrt(dx * dx + dy * dy)
+        
+        if length < 1e-10:
+            return ((0.0, 1.0), (0.0, -1.0))
+        
+        normalized_dx = dx / length
+        normalized_dy = dy / length
+        
+        left_normal = (-normalized_dy, normalized_dx)
+        right_normal = (normalized_dy, -normalized_dx)
+        
+        return left_normal, right_normal
+    
+    @staticmethod
+    def get_best_offset_direction(median: List[List[float]],
+                                   grid_x: float,
+                                   grid_y: float,
+                                   grid_size: float,
+                                   stroke_index: int,
+                                   total_strokes: int) -> Tuple[float, float]:
+        """
+        智能选择最佳的箭头偏移方向
+        
+        Args:
+            median: 笔画中位数点列表
+            grid_x: 田字格左下角x坐标
+            grid_y: 田字格左下角y坐标
+            grid_size: 田字格大小
+            stroke_index: 当前笔画索引
+            total_strokes: 总笔画数
+            
+        Returns:
+            最佳偏移方向向量 (dx, dy)
+        """
+        if len(median) < 2:
             return (0.7, 0.7)
-        elif direction == "curved":
-            return (0.7, 0.7)
+        
+        start_point = median[0]
+        end_point = median[-1]
+        
+        dx = end_point[0] - start_point[0]
+        dy = end_point[1] - start_point[1]
+        
+        angle = math.atan2(abs(dy), abs(dx))
+        
+        horizontal_threshold = math.pi / 6
+        vertical_threshold = math.pi / 3
+        
+        grid_center_x = grid_x + grid_size / 2
+        grid_center_y = grid_y + grid_size / 2
+        
+        stroke_mid_x = (start_point[0] + end_point[0]) / 2
+        stroke_mid_y = (start_point[1] + end_point[1]) / 2
+        
+        if angle < horizontal_threshold:
+            if stroke_mid_y > grid_center_y:
+                return (0.0, 1.0)
+            else:
+                return (0.0, -1.0)
+        
+        elif angle > vertical_threshold:
+            if stroke_mid_x > grid_center_x:
+                return (1.0, 0.0)
+            else:
+                return (-1.0, 0.0)
+        
         else:
-            return (0.7, 0.7)
+            if dx > 0 and dy > 0:
+                if stroke_mid_x + stroke_mid_y > grid_center_x + grid_center_y:
+                    return (0.7, 0.7)
+                else:
+                    return (-0.7, -0.7)
+            elif dx > 0 and dy < 0:
+                if stroke_mid_x - stroke_mid_y > grid_center_x - grid_center_y:
+                    return (0.7, -0.7)
+                else:
+                    return (-0.7, 0.7)
+            elif dx < 0 and dy > 0:
+                if stroke_mid_x - stroke_mid_y > grid_center_x - grid_center_y:
+                    return (-0.7, 0.7)
+                else:
+                    return (0.7, -0.7)
+            else:
+                if stroke_mid_x + stroke_mid_y > grid_center_x + grid_center_y:
+                    return (-0.7, -0.7)
+                else:
+                    return (0.7, 0.7)
     
     @staticmethod
     def get_point_along_median(median: List[List[float]], 
@@ -1394,6 +1472,11 @@ class CopybookGenerator:
         """
         绘制改进版的带箭头笔画
         
+        每个笔画的标识沿着该笔画的走势，避免集中在一起。
+        横笔画：根据在田字格中的位置，选择向上或向下偏移
+        竖笔画：根据在田字格中的位置，选择向左或向右偏移
+        斜笔画：根据在田字格中的位置，选择合适的对角线方向偏移
+        
         Args:
             c: PDF画布对象
             median: 笔画中位数点列表
@@ -1426,8 +1509,11 @@ class CopybookGenerator:
             grid_size, total_length
         )
         
-        offset_direction = ImprovedStrokeAnalyzer.get_arrow_offset_for_direction(primary_direction)
-        offset_distance = base_stroke_width * 3
+        offset_direction = ImprovedStrokeAnalyzer.get_best_offset_direction(
+            median, grid_x, grid_y, grid_size, stroke_order - 1, 10
+        )
+        
+        offset_distance = base_stroke_width * 5
         
         segments = ImprovedStrokeAnalyzer.split_stroke_into_segments(median)
         
