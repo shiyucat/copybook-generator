@@ -21,6 +21,8 @@ from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm
 from reportlab.pdfgen import canvas
 from reportlab.lib.colors import Color, black, gray, red, blue
+
+light_red = Color(1.0, 0.4, 0.4, alpha=0.8)
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 
@@ -445,6 +447,450 @@ class ArrowDrawer:
         c.line(end[0], end[1], arrow_point2[0], arrow_point2[1])
 
 
+class StrokeSegment:
+    """笔画线段"""
+    
+    def __init__(self, 
+                 start: Tuple[float, float], 
+                 end: Tuple[float, float],
+                 segment_type: str = "linear",
+                 control_points: List[Tuple[float, float]] = None):
+        """
+        初始化笔画线段
+        
+        Args:
+            start: 起点坐标
+            end: 终点坐标
+            segment_type: 线段类型（linear 或 curved）
+            control_points: 控制点（用于曲线）
+        """
+        self.start = start
+        self.end = end
+        self.segment_type = segment_type
+        self.control_points = control_points or []
+        
+    def get_length(self) -> float:
+        """获取线段长度"""
+        return math.sqrt(
+            (self.end[0] - self.start[0])**2 + 
+            (self.end[1] - self.start[1])**2
+        )
+    
+    def get_direction(self) -> Tuple[float, float]:
+        """获取线段方向向量"""
+        length = self.get_length()
+        if length < 1e-10:
+            return (0.0, 0.0)
+        return (
+            (self.end[0] - self.start[0]) / length,
+            (self.end[1] - self.start[1]) / length
+        )
+    
+    def get_midpoint(self) -> Tuple[float, float]:
+        """获取线段中点"""
+        return (
+            (self.start[0] + self.end[0]) / 2,
+            (self.start[1] + self.end[1]) / 2
+        )
+
+
+class ImprovedStrokeAnalyzer:
+    """改进版笔画分析器"""
+    
+    @staticmethod
+    def get_stroke_primary_direction(median: List[List[float]]) -> str:
+        """
+        获取笔画的主方向
+        
+        Args:
+            median: 笔画中位数点列表
+            
+        Returns:
+            主方向："horizontal"（横）、"vertical"（竖）、"diagonal"（斜）、"curved"（曲）
+        """
+        if len(median) < 2:
+            return "horizontal"
+        
+        start = median[0]
+        end = median[-1]
+        
+        dx = end[0] - start[0]
+        dy = end[1] - start[1]
+        
+        angle = math.atan2(abs(dy), abs(dx))
+        
+        horizontal_threshold = math.pi / 6
+        vertical_threshold = math.pi / 3
+        
+        if angle < horizontal_threshold:
+            return "horizontal"
+        elif angle > vertical_threshold:
+            return "vertical"
+        else:
+            stroke_type = StrokeAnalyzer.analyze_stroke_type(median)
+            if stroke_type == StrokeType.CURVED:
+                return "curved"
+            return "diagonal"
+    
+    @staticmethod
+    def split_stroke_into_segments(median: List[List[float]], 
+                                    angle_threshold: float = math.pi / 4) -> List[StrokeSegment]:
+        """
+        将笔画拆分为多个线段，检测转折点
+        
+        Args:
+            median: 笔画中位数点列表
+            angle_threshold: 角度阈值，超过此角度认为是转折点
+            
+        Returns:
+            笔画线段列表
+        """
+        if len(median) < 2:
+            return []
+        
+        segments = []
+        
+        if len(median) == 2:
+            segments.append(StrokeSegment(
+                (median[0][0], median[0][1]),
+                (median[1][0], median[1][1]),
+                "linear"
+            ))
+            return segments
+        
+        segment_start = median[0]
+        prev_direction = None
+        
+        for i in range(1, len(median)):
+            current_point = median[i]
+            
+            if i >= 2:
+                prev_point = median[i - 1]
+                prev_prev_point = median[i - 2]
+                
+                dx1 = prev_point[0] - prev_prev_point[0]
+                dy1 = prev_point[1] - prev_prev_point[1]
+                dx2 = current_point[0] - prev_point[0]
+                dy2 = current_point[1] - prev_point[1]
+                
+                angle1 = math.atan2(dy1, dx1)
+                angle2 = math.atan2(dy2, dx2)
+                
+                angle_diff = abs(angle2 - angle1)
+                if angle_diff > math.pi:
+                    angle_diff = 2 * math.pi - angle_diff
+                
+                if angle_diff > angle_threshold:
+                    segments.append(StrokeSegment(
+                        (segment_start[0], segment_start[1]),
+                        (prev_point[0], prev_point[1]),
+                        "linear"
+                    ))
+                    segment_start = prev_point
+        
+        if segment_start != median[-1]:
+            segments.append(StrokeSegment(
+                (segment_start[0], segment_start[1]),
+                (median[-1][0], median[-1][1]),
+                "linear"
+            ))
+        
+        return segments
+    
+    @staticmethod
+    def get_arrow_offset_for_direction(direction: str) -> Tuple[float, float]:
+        """
+        根据笔画方向获取箭头的偏移方向
+        
+        Args:
+            direction: 笔画方向
+            
+        Returns:
+            偏移向量 (dx, dy)，表示箭头应该相对于笔画中心线的偏移方向
+        """
+        if direction == "horizontal":
+            return (0.0, 1.0)
+        elif direction == "vertical":
+            return (1.0, 0.0)
+        elif direction == "diagonal":
+            return (0.7, 0.7)
+        elif direction == "curved":
+            return (0.7, 0.7)
+        else:
+            return (0.7, 0.7)
+    
+    @staticmethod
+    def get_point_along_median(median: List[List[float]], 
+                                ratio: float) -> Tuple[float, float]:
+        """
+        获取笔画中线上指定比例位置的点
+        
+        Args:
+            median: 笔画中位数点列表
+            ratio: 比例（0.0 到 1.0）
+            
+        Returns:
+            点坐标 (x, y)
+        """
+        if len(median) < 2:
+            return (0.0, 0.0)
+        
+        if ratio <= 0.0:
+            return (median[0][0], median[0][1])
+        if ratio >= 1.0:
+            return (median[-1][0], median[-1][1])
+        
+        total_length = 0.0
+        segment_lengths = []
+        
+        for i in range(len(median) - 1):
+            length = math.sqrt(
+                (median[i + 1][0] - median[i][0])**2 + 
+                (median[i + 1][1] - median[i][1])**2
+            )
+            segment_lengths.append(length)
+            total_length += length
+        
+        if total_length < 1e-10:
+            return (median[0][0], median[0][1])
+        
+        target_length = total_length * ratio
+        accumulated_length = 0.0
+        
+        for i in range(len(median) - 1):
+            if accumulated_length + segment_lengths[i] >= target_length:
+                segment_ratio = (target_length - accumulated_length) / segment_lengths[i]
+                return (
+                    median[i][0] + (median[i + 1][0] - median[i][0]) * segment_ratio,
+                    median[i][1] + (median[i + 1][1] - median[i][1]) * segment_ratio
+                )
+            accumulated_length += segment_lengths[i]
+        
+        return (median[-1][0], median[-1][1])
+
+
+class ImprovedArrowDrawer:
+    """改进版箭头绘制器"""
+    
+    ARROW_LENGTH_RATIO = 0.25
+    ARROW_WIDTH_RATIO = 0.2
+    STROKE_WIDTH_RATIO = 0.05
+    
+    @staticmethod
+    def calculate_arrow_dimensions(grid_size: float, 
+                                    stroke_length: float) -> Tuple[float, float, float]:
+        """
+        计算箭头的尺寸
+        
+        Args:
+            grid_size: 田字格大小
+            stroke_length: 笔画长度
+            
+        Returns:
+            (箭头长度, 箭头宽度, 笔画基准宽度)
+        """
+        base_stroke_width = grid_size * ImprovedArrowDrawer.STROKE_WIDTH_RATIO
+        
+        arrow_length = stroke_length * ImprovedArrowDrawer.ARROW_LENGTH_RATIO
+        arrow_length = max(arrow_length, grid_size * 0.08)
+        arrow_length = min(arrow_length, grid_size * 0.3)
+        
+        arrow_width = base_stroke_width * ImprovedArrowDrawer.ARROW_WIDTH_RATIO
+        
+        return arrow_length, arrow_width, base_stroke_width
+    
+    @staticmethod
+    def draw_short_arrow(c: canvas.Canvas,
+                        start: Tuple[float, float],
+                        direction: Tuple[float, float],
+                        arrow_length: float,
+                        arrow_width: float,
+                        offset_direction: Tuple[float, float],
+                        offset_distance: float,
+                        color: Color = light_red):
+        """
+        绘制短箭头（笔画长度的1/4）
+        
+        Args:
+            c: PDF画布对象
+            start: 箭头起点（在笔画开始位置）
+            direction: 箭头方向向量
+            arrow_length: 箭头长度
+            arrow_width: 箭头线宽
+            offset_direction: 偏移方向向量（表示箭头相对于笔画中心线的偏移方向）
+            offset_distance: 偏移距离
+            color: 箭头颜色
+        """
+        dir_length = math.sqrt(direction[0]**2 + direction[1]**2)
+        if dir_length < 1e-10:
+            return
+        
+        normalized_dir = (direction[0] / dir_length, direction[1] / dir_length)
+        
+        offset_length = math.sqrt(offset_direction[0]**2 + offset_direction[1]**2)
+        if offset_length > 1e-10:
+            normalized_offset = (
+                offset_direction[0] / offset_length,
+                offset_direction[1] / offset_length
+            )
+        else:
+            normalized_offset = (0.0, 0.0)
+        
+        arrow_start = (
+            start[0] + normalized_offset[0] * offset_distance,
+            start[1] + normalized_offset[1] * offset_distance
+        )
+        
+        arrow_end = (
+            arrow_start[0] + normalized_dir[0] * arrow_length,
+            arrow_start[1] + normalized_dir[1] * arrow_length
+        )
+        
+        c.setStrokeColor(color)
+        c.setFillColor(color)
+        c.setLineWidth(arrow_width)
+        
+        c.line(arrow_start[0], arrow_start[1], arrow_end[0], arrow_end[1])
+        
+        arrowhead_length = arrow_width * 3
+        arrowhead_angle = math.pi / 6
+        
+        angle = math.atan2(normalized_dir[1], normalized_dir[0])
+        
+        arrow_point1 = (
+            arrow_end[0] - arrowhead_length * math.cos(angle - arrowhead_angle),
+            arrow_end[1] - arrowhead_length * math.sin(angle - arrowhead_angle)
+        )
+        arrow_point2 = (
+            arrow_end[0] - arrowhead_length * math.cos(angle + arrowhead_angle),
+            arrow_end[1] - arrowhead_length * math.sin(angle + arrowhead_angle)
+        )
+        
+        c.line(arrow_end[0], arrow_end[1], arrow_point1[0], arrow_point1[1])
+        c.line(arrow_end[0], arrow_end[1], arrow_point2[0], arrow_point2[1])
+        
+        return arrow_start
+    
+    @staticmethod
+    def draw_stroke_number(c: canvas.Canvas,
+                           stroke_order: int,
+                           position: Tuple[float, float],
+                           arrow_width: float,
+                           color: Color = blue):
+        """
+        在箭头开始位置绘制笔顺数字编号
+        
+        Args:
+            c: PDF画布对象
+            stroke_order: 笔顺数字序号
+            position: 数字位置（箭头开始位置）
+            arrow_width: 箭头宽度（用于确定数字大小）
+            color: 数字颜色
+        """
+        font_size = max(arrow_width * 5, 8)
+        font_size = min(font_size, 14)
+        
+        c.setFillColor(color)
+        c.setFont("Helvetica-Bold", font_size)
+        
+        order_text = str(stroke_order)
+        order_width = c.stringWidth(order_text, "Helvetica-Bold", font_size)
+        
+        label_x = position[0] - order_width - 3
+        label_y = position[1] - font_size / 4
+        
+        c.drawString(label_x, label_y, order_text)
+    
+    @staticmethod
+    def draw_curved_short_arrow(c: canvas.Canvas,
+                                 median: List[List[float]],
+                                 arrow_length_ratio: float,
+                                 arrow_width: float,
+                                 offset_direction: Tuple[float, float],
+                                 offset_distance: float,
+                                 color: Color = light_red):
+        """
+        绘制弧形短箭头
+        
+        Args:
+            c: PDF画布对象
+            median: 笔画中位数点列表
+            arrow_length_ratio: 箭头长度比例
+            arrow_width: 箭头线宽
+            offset_direction: 偏移方向向量
+            offset_distance: 偏移距离
+            color: 箭头颜色
+        """
+        if len(median) < 2:
+            return None
+        
+        offset_length = math.sqrt(offset_direction[0]**2 + offset_direction[1]**2)
+        if offset_length > 1e-10:
+            normalized_offset = (
+                offset_direction[0] / offset_length,
+                offset_direction[1] / offset_length
+            )
+        else:
+            normalized_offset = (0.0, 0.0)
+        
+        start_point = (
+            median[0][0] + normalized_offset[0] * offset_distance,
+            median[0][1] + normalized_offset[1] * offset_distance
+        )
+        
+        end_ratio = min(arrow_length_ratio, 0.5)
+        end_point = ImprovedStrokeAnalyzer.get_point_along_median(median, end_ratio)
+        end_point = (
+            end_point[0] + normalized_offset[0] * offset_distance,
+            end_point[1] + normalized_offset[1] * offset_distance
+        )
+        
+        mid_ratio = end_ratio / 2
+        mid_point = ImprovedStrokeAnalyzer.get_point_along_median(median, mid_ratio)
+        mid_point = (
+            mid_point[0] + normalized_offset[0] * offset_distance,
+            mid_point[1] + normalized_offset[1] * offset_distance
+        )
+        
+        c.setStrokeColor(color)
+        c.setFillColor(color)
+        c.setLineWidth(arrow_width)
+        
+        path = c.beginPath()
+        path.moveTo(start_point[0], start_point[1])
+        path.curveTo(
+            mid_point[0], mid_point[1],
+            mid_point[0], mid_point[1],
+            end_point[0], end_point[1]
+        )
+        c.drawPath(path, stroke=1, fill=0)
+        
+        if len(median) >= 2:
+            last_segment_start = mid_point
+            last_segment_end = end_point
+            
+            dx = last_segment_end[0] - last_segment_start[0]
+            dy = last_segment_end[1] - last_segment_start[1]
+            angle = math.atan2(dy, dx)
+            
+            arrowhead_length = arrow_width * 3
+            arrowhead_angle = math.pi / 6
+            
+            arrow_point1 = (
+                end_point[0] - arrowhead_length * math.cos(angle - arrowhead_angle),
+                end_point[1] - arrowhead_length * math.sin(angle - arrowhead_angle)
+            )
+            arrow_point2 = (
+                end_point[0] - arrowhead_length * math.cos(angle + arrowhead_angle),
+                end_point[1] - arrowhead_length * math.sin(angle + arrowhead_angle)
+            )
+            
+            c.line(end_point[0], end_point[1], arrow_point1[0], arrow_point1[1])
+            c.line(end_point[0], end_point[1], arrow_point2[0], arrow_point2[1])
+        
+        return start_point
+
+
 class HanziDataLoader:
     """汉字数据加载器"""
     
@@ -671,12 +1117,28 @@ class CopybookGenerator:
                                     grid_y: float, 
                                     grid_size: float):
         """
-        绘制笔顺标准功能：
-        1. 每个笔画标注笔顺数字序号（从1开始递增）
-        2. 每一笔绘制跟随笔画走向的书写方向引导箭头
-        3. 直线笔画：直线箭头，完全贴合笔画走向
-        4. 弧形笔画：弧形箭头，完全贴合圆弧笔画走向
-        5. 数字序号标注在笔画外侧相邻空白处
+        绘制笔顺标准功能（改进版）：
+        1. 每个字符按照国家标准标准书写笔顺，拆分出依次书写的独立笔画
+        2. 每一笔分配唯一的笔顺数字序号，数字从1开始依次递增
+        3. 每一笔都需要标注：笔顺数字序号 + 跟随笔画走向的书写方向引导箭头
+        4. 直线笔画（竖、横、撇、捺等直线型笔画）：
+           - 箭头为直线箭头，完全贴合笔画走向
+           - 箭头方向=笔画实际书写运笔方向
+           - 数字序号标注在直线笔画外侧相邻空白处
+           - 横：箭头在笔画上方，从左到右
+           - 竖：箭头在笔画右侧，从上到下
+        5. 弧形笔画（圆弧、半圆、曲线型笔画）：
+           - 箭头为同弧度弯曲弧形箭头，完全贴合圆弧笔画走向
+           - 箭头弧度与笔画弧度完全一致
+           - 箭头方向=圆弧笔画实际环绕运笔方向
+           - 数字序号标注在弧形笔画外侧相邻空白处
+        6. 箭头粗细：笔画粗细的1/5
+        7. 箭头长度：笔画长度的1/4
+        8. 转折笔画（如横折）：
+           - 在笔顺开始的地方、转折的地方都存在上述标识
+           - 表示是第几笔的数字只在开始的位置即可
+        9. 严格按照书写先后顺序标注数字，第一笔标数字1、第二笔标数字2，以此类推
+        10. 箭头完整指示每一笔：起笔位置→运笔路径→收笔位置的完整书写方向
         
         Args:
             c: PDF画布对象
@@ -688,13 +1150,13 @@ class CopybookGenerator:
         hanzi_data = self._get_hanzi_writer_data(character)
         
         if hanzi_data is None:
-            self._draw_default_stroke_order(c, character, grid_x, grid_y, grid_size)
+            self._draw_improved_default_stroke_order(c, character, grid_x, grid_y, grid_size)
             return
         
         medians = hanzi_data.get('medians', [])
         
         if not medians:
-            self._draw_default_stroke_order(c, character, grid_x, grid_y, grid_size)
+            self._draw_improved_default_stroke_order(c, character, grid_x, grid_y, grid_size)
             return
         
         for stroke_index, median in enumerate(medians):
@@ -707,24 +1169,9 @@ class CopybookGenerator:
             if len(transformed_median) < 2:
                 continue
             
-            stroke_type = StrokeAnalyzer.analyze_stroke_type(transformed_median)
-            
-            start_point, end_point = StrokeAnalyzer.get_stroke_endpoints(transformed_median)
-            
-            if stroke_type == StrokeType.LINEAR:
-                ArrowDrawer.draw_linear_arrow(
-                    c, start_point, end_point,
-                    color=red, line_width=1.5
-                )
-            else:
-                ArrowDrawer.draw_curved_arrow(
-                    c, transformed_median,
-                    color=red, line_width=1.5
-                )
-            
-            self._draw_stroke_number(
-                c, stroke_order, transformed_median, 
-                stroke_type, grid_x, grid_y, grid_size
+            self._draw_improved_stroke_with_arrow(
+                c, transformed_median, stroke_order,
+                grid_x, grid_y, grid_size
             )
     
     def _draw_stroke_number(self, 
@@ -936,6 +1383,253 @@ class CopybookGenerator:
             label_y = max(grid_y + 2, min(grid_y + grid_size - 12, label_y))
             
             c.drawString(label_x, label_y, order_text)
+    
+    def _draw_improved_stroke_with_arrow(self,
+                                         c: canvas.Canvas,
+                                         median: List[List[float]],
+                                         stroke_order: int,
+                                         grid_x: float,
+                                         grid_y: float,
+                                         grid_size: float):
+        """
+        绘制改进版的带箭头笔画
+        
+        Args:
+            c: PDF画布对象
+            median: 笔画中位数点列表
+            stroke_order: 笔顺数字序号
+            grid_x: 田字格左下角x坐标
+            grid_y: 田字格左下角y坐标
+            grid_size: 田字格大小
+        """
+        if len(median) < 2:
+            return
+        
+        primary_direction = ImprovedStrokeAnalyzer.get_stroke_primary_direction(median)
+        
+        stroke_type = StrokeAnalyzer.analyze_stroke_type(median)
+        
+        start_point, end_point = StrokeAnalyzer.get_stroke_endpoints(median)
+        
+        total_length = 0.0
+        for i in range(len(median) - 1):
+            segment_length = math.sqrt(
+                (median[i + 1][0] - median[i][0])**2 + 
+                (median[i + 1][1] - median[i][1])**2
+            )
+            total_length += segment_length
+        
+        if total_length < 1e-10:
+            return
+        
+        arrow_length, arrow_width, base_stroke_width = ImprovedArrowDrawer.calculate_arrow_dimensions(
+            grid_size, total_length
+        )
+        
+        offset_direction = ImprovedStrokeAnalyzer.get_arrow_offset_for_direction(primary_direction)
+        offset_distance = base_stroke_width * 3
+        
+        segments = ImprovedStrokeAnalyzer.split_stroke_into_segments(median)
+        
+        number_drawn = False
+        
+        for segment_index, segment in enumerate(segments):
+            segment_length = segment.get_length()
+            if segment_length < 1e-10:
+                continue
+            
+            segment_direction = segment.get_direction()
+            
+            if stroke_type == StrokeType.LINEAR:
+                arrow_start = segment.start
+                
+                actual_arrow_length = min(arrow_length, segment_length * 0.5)
+                
+                arrow_start_pos = (
+                    arrow_start[0] + offset_direction[0] * offset_distance,
+                    arrow_start[1] + offset_direction[1] * offset_distance
+                )
+                
+                drawn_arrow_start = ImprovedArrowDrawer.draw_short_arrow(
+                    c,
+                    arrow_start,
+                    segment_direction,
+                    actual_arrow_length,
+                    arrow_width,
+                    offset_direction,
+                    offset_distance,
+                    color=light_red
+                )
+                
+                if not number_drawn and drawn_arrow_start is not None:
+                    ImprovedArrowDrawer.draw_stroke_number(
+                        c,
+                        stroke_order,
+                        drawn_arrow_start,
+                        arrow_width,
+                        color=blue
+                    )
+                    number_drawn = True
+            else:
+                arrow_start_pos = ImprovedArrowDrawer.draw_curved_short_arrow(
+                    c,
+                    median,
+                    ImprovedArrowDrawer.ARROW_LENGTH_RATIO,
+                    arrow_width,
+                    offset_direction,
+                    offset_distance,
+                    color=light_red
+                )
+                
+                if not number_drawn and arrow_start_pos is not None:
+                    ImprovedArrowDrawer.draw_stroke_number(
+                        c,
+                        stroke_order,
+                        arrow_start_pos,
+                        arrow_width,
+                        color=blue
+                    )
+                    number_drawn = True
+    
+    def _draw_improved_default_stroke_order(self,
+                                            c: canvas.Canvas,
+                                            character: str,
+                                            grid_x: float,
+                                            grid_y: float,
+                                            grid_size: float):
+        """
+        改进版的默认笔画顺序绘制（当无法获取 hanzi-writer 数据时使用）
+        
+        Args:
+            c: PDF画布对象
+            character: 汉字字符
+            grid_x: 田字格左下角x坐标
+            grid_y: 田字格左下角y坐标
+            grid_size: 田字格大小
+        """
+        strokes = self.detailed_stroke_data.get(character, [])
+        
+        if not strokes:
+            default_strokes = self.stroke_data.get(character, [])
+            if default_strokes:
+                for i, stroke_name in enumerate(default_strokes):
+                    stroke_order = i + 1
+                    
+                    angle_step = 2 * math.pi / len(default_strokes)
+                    angle = i * angle_step
+                    
+                    center_x = grid_x + grid_size / 2
+                    center_y = grid_y + grid_size / 2
+                    radius = grid_size * 0.3
+                    
+                    start_x = center_x
+                    start_y = center_y
+                    end_x = center_x + radius * math.cos(angle)
+                    end_y = center_y + radius * math.sin(angle)
+                    
+                    total_length = radius
+                    arrow_length, arrow_width, base_stroke_width = ImprovedArrowDrawer.calculate_arrow_dimensions(
+                        grid_size, total_length
+                    )
+                    
+                    direction = (end_x - start_x, end_y - start_y)
+                    offset_direction = (0.7, 0.7)
+                    offset_distance = base_stroke_width * 3
+                    
+                    actual_arrow_length = min(arrow_length, total_length * 0.5)
+                    
+                    drawn_arrow_start = ImprovedArrowDrawer.draw_short_arrow(
+                        c,
+                        (start_x, start_y),
+                        direction,
+                        actual_arrow_length,
+                        arrow_width,
+                        offset_direction,
+                        offset_distance,
+                        color=light_red
+                    )
+                    
+                    if drawn_arrow_start is not None:
+                        ImprovedArrowDrawer.draw_stroke_number(
+                            c,
+                            stroke_order,
+                            drawn_arrow_start,
+                            arrow_width,
+                            color=blue
+                        )
+            return
+        
+        for stroke in strokes:
+            stroke_order = stroke["order"]
+            
+            start_x = grid_x + stroke["start_x"] * grid_size
+            start_y = grid_y + stroke["start_y"] * grid_size
+            end_x = grid_x + stroke["end_x"] * grid_size
+            end_y = grid_y + stroke["end_y"] * grid_size
+            
+            total_length = math.sqrt((end_x - start_x)**2 + (end_y - start_y)**2)
+            arrow_length, arrow_width, base_stroke_width = ImprovedArrowDrawer.calculate_arrow_dimensions(
+                grid_size, total_length
+            )
+            
+            direction = (end_x - start_x, end_y - start_y)
+            
+            if stroke["direction"] == StrokeDirection.LEFT_TO_RIGHT:
+                offset_direction = (0.0, 1.0)
+            elif stroke["direction"] == StrokeDirection.TOP_TO_BOTTOM:
+                offset_direction = (1.0, 0.0)
+            else:
+                offset_direction = (0.7, 0.7)
+            
+            offset_distance = base_stroke_width * 3
+            
+            if stroke["direction"] == StrokeDirection.CURVED:
+                median = [
+                    [start_x, start_y],
+                    [(start_x + end_x) / 2, (start_y + end_y) / 2 + grid_size * 0.1],
+                    [end_x, end_y]
+                ]
+                
+                arrow_start_pos = ImprovedArrowDrawer.draw_curved_short_arrow(
+                    c,
+                    median,
+                    ImprovedArrowDrawer.ARROW_LENGTH_RATIO,
+                    arrow_width,
+                    offset_direction,
+                    offset_distance,
+                    color=light_red
+                )
+                
+                if arrow_start_pos is not None:
+                    ImprovedArrowDrawer.draw_stroke_number(
+                        c,
+                        stroke_order,
+                        arrow_start_pos,
+                        arrow_width,
+                        color=blue
+                    )
+            else:
+                actual_arrow_length = min(arrow_length, total_length * 0.5)
+                
+                drawn_arrow_start = ImprovedArrowDrawer.draw_short_arrow(
+                    c,
+                    (start_x, start_y),
+                    direction,
+                    actual_arrow_length,
+                    arrow_width,
+                    offset_direction,
+                    offset_distance,
+                    color=light_red
+                )
+                
+                if drawn_arrow_start is not None:
+                    ImprovedArrowDrawer.draw_stroke_number(
+                        c,
+                        stroke_order,
+                        drawn_arrow_start,
+                        arrow_width,
+                        color=blue
+                    )
     
     def _get_default_stroke_data(self) -> Dict[str, List[Dict[str, Any]]]:
         """
