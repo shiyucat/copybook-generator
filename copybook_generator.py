@@ -1071,6 +1071,7 @@ class CopybookGenerator:
         self.font_name = "Helvetica"
         self.font_used_name = "Helvetica (默认英文字体)"
         self.font_used_path = None
+        self.font_warning = None
         
         if font_path and os.path.exists(font_path):
             try:
@@ -1083,21 +1084,22 @@ class CopybookGenerator:
             except:
                 pass
         
+        project_font_dir = Path(__file__).parent / "fonts"
         user_font_dir = Path.home() / "Library" / "Fonts"
         system_font_dir = Path("/System/Library/Fonts")
         system_font_supplemental_dir = Path("/System/Library/Fonts/Supplemental")
         library_font_dir = Path("/Library/Fonts")
         
-        font_dirs = [user_font_dir, library_font_dir, system_font_dir, system_font_supplemental_dir]
+        font_dirs = [project_font_dir, user_font_dir, library_font_dir, system_font_dir, system_font_supplemental_dir]
         
         zhenkai_font_patterns = [
-            "Kai.ttc", "STKaiti.ttc", "KaiTi.ttc", "楷体.ttc",
+            "Kai.ttc", "STKaiti.ttc", "KaiTi.ttc", "楷体.ttc", "simkai.ttf", "KaiTi_GB2312.ttf",
             "Kai.ttf", "STKaiti.ttf", "KaiTi.ttf", "楷体.ttf",
         ]
         
         xingkai_font_patterns = [
-            "STXingkai.ttc", "Xingkai.ttc", "行楷.ttc",
-            "STXingkai.ttf", "Xingkai.ttf", "行楷.ttf",
+            "STXingkai.ttc", "Xingkai.ttc", "行楷.ttc", "STXingkai.ttf", "simxingkai.ttf",
+            "Xingkai.ttf", "行楷.ttf", "华文行楷.ttf", "华文行楷.ttc",
         ]
         
         fallback_fonts = [
@@ -1117,6 +1119,12 @@ class CopybookGenerator:
                     font_file = font_dir / pattern
                     if font_file.exists():
                         return str(font_file)
+                    for file in font_dir.glob("*"):
+                        if file.is_file():
+                            filename_lower = file.name.lower()
+                            pattern_lower = pattern.lower()
+                            if pattern_lower in filename_lower or filename_lower in pattern_lower:
+                                return str(file)
             return None
         
         def register_font(font_path, font_name, display_name):
@@ -1131,10 +1139,14 @@ class CopybookGenerator:
                 pass
             return False
         
+        requested_style = "行楷" if self.font_style == "xingkai" else "正楷"
+        found_requested = False
+        
         if self.font_style == "xingkai":
             xingkai_path = find_font_in_dirs(xingkai_font_patterns)
             if xingkai_path:
                 if register_font(xingkai_path, "Xingkai", "行楷"):
+                    found_requested = True
                     return
             
             zhenkai_path = find_font_in_dirs(zhenkai_font_patterns)
@@ -1145,6 +1157,7 @@ class CopybookGenerator:
             zhenkai_path = find_font_in_dirs(zhenkai_font_patterns)
             if zhenkai_path:
                 if register_font(zhenkai_path, "KaiTi", "楷体"):
+                    found_requested = True
                     return
             
             xingkai_path = find_font_in_dirs(xingkai_font_patterns)
@@ -1154,11 +1167,27 @@ class CopybookGenerator:
         
         for font_path, font_name, display_name in fallback_fonts:
             if register_font(font_path, font_name, display_name):
+                if not found_requested:
+                    self.font_warning = (
+                        f"⚠️  未找到请求的{requested_style}字体，已自动回退到【{display_name}】。\n"
+                        f"   如需使用{requested_style}字体，请按以下步骤操作：\n"
+                        f"   1. 下载{requested_style}字体文件（.ttf 或 .ttc 格式）\n"
+                        f"   2. 将字体文件放置到项目目录的 fonts/ 文件夹中\n"
+                        f"   3. 或放置到 ~/Library/Fonts/ 系统字体目录\n"
+                        f"   字体搜索目录（按优先级）：\n"
+                        f"   - 项目目录: {project_font_dir}\n"
+                        f"   - 用户字体: {user_font_dir}\n"
+                        f"   - 系统字体: {system_font_dir}\n"
+                    )
                 return
         
         self.font_name = "Helvetica"
         self.font_used_name = "Helvetica (默认英文字体)"
         self.font_used_path = None
+        self.font_warning = (
+            f"⚠️  未找到任何中文字体，使用默认英文字体。\n"
+            f"   请下载中文字体并放置到 fonts/ 目录或系统字体目录。"
+        )
     
     def _calculate_grid_dimensions(self):
         """计算田字格尺寸"""
@@ -2337,6 +2366,9 @@ def main():
         print(f"  实际使用字体：{generator.font_used_name}")
         if generator.font_used_path:
             print(f"  字体文件：{generator.font_used_path}")
+        if generator.font_warning:
+            print()
+            print(generator.font_warning)
         sys.exit(0)
     else:
         print(f"✗ {message}")
