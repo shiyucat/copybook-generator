@@ -1069,49 +1069,96 @@ class CopybookGenerator:
     def _init_font(self, font_path: Optional[str]):
         """初始化字体"""
         self.font_name = "Helvetica"
+        self.font_used_name = "Helvetica (默认英文字体)"
+        self.font_used_path = None
         
         if font_path and os.path.exists(font_path):
             try:
                 font_name = "CustomFont"
                 pdfmetrics.registerFont(TTFont(font_name, font_path))
                 self.font_name = font_name
+                self.font_used_name = "自定义字体"
+                self.font_used_path = font_path
                 return
             except:
                 pass
         
-        zhenkai_fonts = [
-            ("/System/Library/Fonts/Kai.ttc", "Kai"),
-            ("/System/Library/Fonts/STKaiti.ttc", "STKaiti"),
+        user_font_dir = Path.home() / "Library" / "Fonts"
+        system_font_dir = Path("/System/Library/Fonts")
+        system_font_supplemental_dir = Path("/System/Library/Fonts/Supplemental")
+        library_font_dir = Path("/Library/Fonts")
+        
+        font_dirs = [user_font_dir, library_font_dir, system_font_dir, system_font_supplemental_dir]
+        
+        zhenkai_font_patterns = [
+            "Kai.ttc", "STKaiti.ttc", "KaiTi.ttc", "楷体.ttc",
+            "Kai.ttf", "STKaiti.ttf", "KaiTi.ttf", "楷体.ttf",
         ]
         
-        xingkai_fonts = [
-            ("/System/Library/Fonts/STXingkai.ttc", "STXingkai"),
+        xingkai_font_patterns = [
+            "STXingkai.ttc", "Xingkai.ttc", "行楷.ttc",
+            "STXingkai.ttf", "Xingkai.ttf", "行楷.ttf",
         ]
         
         fallback_fonts = [
-            ("/System/Library/Fonts/STHeiti Light.ttc", "STHeitiLight"),
-            ("/System/Library/Fonts/STHeiti Medium.ttc", "STHeitiMedium"),
-            ("/System/Library/Fonts/Hiragino Sans GB.ttc", "HiraginoSansGB"),
-            ("/System/Library/Fonts/ヒラギノ明朝 ProN.ttc", "HiraginoMincho"),
-            ("/System/Library/Fonts/ヒラギノ丸ゴ ProN W4.ttc", "HiraginoMaruGothic"),
+            ("/System/Library/Fonts/Supplemental/Songti.ttc", "Songti", "宋体"),
+            ("/System/Library/Fonts/STHeiti Light.ttc", "STHeitiLight", "黑体-细"),
+            ("/System/Library/Fonts/STHeiti Medium.ttc", "STHeitiMedium", "黑体-中"),
+            ("/System/Library/Fonts/Hiragino Sans GB.ttc", "HiraginoSansGB", "冬青黑体"),
+            ("/System/Library/Fonts/ヒラギノ明朝 ProN.ttc", "HiraginoMincho", "冬青明朝"),
+            ("/System/Library/Fonts/ヒラギノ丸ゴ ProN W4.ttc", "HiraginoMaruGothic", "冬青圆体"),
         ]
         
-        if self.font_style == "xingkai":
-            font_lists = [xingkai_fonts, zhenkai_fonts, fallback_fonts]
-        else:
-            font_lists = [zhenkai_fonts, xingkai_fonts, fallback_fonts]
-        
-        for font_list in font_lists:
-            for font_path, font_name in font_list:
-                try:
-                    if os.path.exists(font_path):
-                        pdfmetrics.registerFont(TTFont(font_name, font_path))
-                        self.font_name = font_name
-                        return
-                except:
+        def find_font_in_dirs(patterns):
+            for font_dir in font_dirs:
+                if not font_dir.exists():
                     continue
+                for pattern in patterns:
+                    font_file = font_dir / pattern
+                    if font_file.exists():
+                        return str(font_file)
+            return None
+        
+        def register_font(font_path, font_name, display_name):
+            try:
+                if os.path.exists(font_path):
+                    pdfmetrics.registerFont(TTFont(font_name, font_path))
+                    self.font_name = font_name
+                    self.font_used_name = display_name
+                    self.font_used_path = font_path
+                    return True
+            except:
+                pass
+            return False
+        
+        if self.font_style == "xingkai":
+            xingkai_path = find_font_in_dirs(xingkai_font_patterns)
+            if xingkai_path:
+                if register_font(xingkai_path, "Xingkai", "行楷"):
+                    return
+            
+            zhenkai_path = find_font_in_dirs(zhenkai_font_patterns)
+            if zhenkai_path:
+                if register_font(zhenkai_path, "KaiTi", "楷体"):
+                    return
+        else:
+            zhenkai_path = find_font_in_dirs(zhenkai_font_patterns)
+            if zhenkai_path:
+                if register_font(zhenkai_path, "KaiTi", "楷体"):
+                    return
+            
+            xingkai_path = find_font_in_dirs(xingkai_font_patterns)
+            if xingkai_path:
+                if register_font(xingkai_path, "Xingkai", "行楷"):
+                    return
+        
+        for font_path, font_name, display_name in fallback_fonts:
+            if register_font(font_path, font_name, display_name):
+                return
         
         self.font_name = "Helvetica"
+        self.font_used_name = "Helvetica (默认英文字体)"
+        self.font_used_path = None
     
     def _calculate_grid_dimensions(self):
         """计算田字格尺寸"""
@@ -2177,9 +2224,21 @@ class CopybookGenerator:
         """
         grid_size = self.grid_size
         
+        if character and (is_stroke_demo or is_highlight):
+            c.setFillColor(Color(0.95, 0.95, 0.95))
+            c.rect(x, y, grid_size, grid_size, fill=1, stroke=0)
+            
+            c.setFillColor(Color(0.7, 0.7, 0.7))
+            c.setFont(self.font_name, self.font_size)
+            
+            text_width = c.stringWidth(character, self.font_name, self.font_size)
+            text_x = x + (grid_size - text_width) / 2
+            text_y = y + (grid_size - self.font_size) / 2 + 5
+            
+            c.drawString(text_x, text_y, character)
+        
         c.setStrokeColor(gray)
         c.setLineWidth(1)
-        
         c.rect(x, y, grid_size, grid_size)
         
         c.setStrokeColor(Color(0.8, 0.8, 0.8))
@@ -2191,43 +2250,6 @@ class CopybookGenerator:
         if self.grid_type == "mizi":
             c.line(x, y, x + grid_size, y + grid_size)
             c.line(x + grid_size, y, x, y + grid_size)
-        
-        c.setStrokeColor(gray)
-        c.setLineWidth(1)
-        
-        if character and is_stroke_demo:
-            c.setFillColor(Color(0.95, 0.95, 0.95))
-            c.rect(x, y, grid_size, grid_size, fill=1, stroke=0)
-            
-            c.setFillColor(Color(0.7, 0.7, 0.7))
-            c.setFont(self.font_name, self.font_size)
-            
-            text_width = c.stringWidth(character, self.font_name, self.font_size)
-            text_x = x + (grid_size - text_width) / 2
-            text_y = y + (grid_size - self.font_size) / 2 + 5
-            
-            c.drawString(text_x, text_y, character)
-            
-            c.setStrokeColor(gray)
-            c.setLineWidth(1)
-            c.rect(x, y, grid_size, grid_size)
-        
-        if character and is_highlight and not is_stroke_demo:
-            c.setFillColor(Color(0.95, 0.95, 0.95))
-            c.rect(x, y, grid_size, grid_size, fill=1, stroke=0)
-            
-            c.setFillColor(Color(0.7, 0.7, 0.7))
-            c.setFont(self.font_name, self.font_size)
-            
-            text_width = c.stringWidth(character, self.font_name, self.font_size)
-            text_x = x + (grid_size - text_width) / 2
-            text_y = y + (grid_size - self.font_size) / 2 + 5
-            
-            c.drawString(text_x, text_y, character)
-            
-            c.setStrokeColor(gray)
-            c.setLineWidth(1)
-            c.rect(x, y, grid_size, grid_size)
     
     def _draw_page(self, c: canvas.Canvas, character: str, page_num: int):
         """
@@ -2311,7 +2333,10 @@ def main():
     if success:
         print(f"✓ {message}")
         print(f"  格子类型：{'米字格' if args.grid_type == 'mizi' else '田字格'}")
-        print(f"  字体样式：{'正楷' if args.font_style == 'zhenkai' else '行楷'}")
+        print(f"  请求字体样式：{'正楷' if args.font_style == 'zhenkai' else '行楷'}")
+        print(f"  实际使用字体：{generator.font_used_name}")
+        if generator.font_used_path:
+            print(f"  字体文件：{generator.font_used_path}")
         sys.exit(0)
     else:
         print(f"✗ {message}")
