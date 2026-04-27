@@ -1034,7 +1034,9 @@ class CopybookGenerator:
                  grid_cols: int = 5,
                  grid_rows: int = 10,
                  font_size: int = 48,
-                 font_path: Optional[str] = None):
+                 font_path: Optional[str] = None,
+                 grid_type: str = "mizi",
+                 font_style: str = "zhenkai"):
         """
         初始化字帖生成器
         
@@ -1044,11 +1046,16 @@ class CopybookGenerator:
             grid_rows: 每页田字格行数，默认10行
             font_size: 字体大小，默认48点
             font_path: 字体文件路径，默认使用系统字体
+            grid_type: 格子类型，"mizi" 表示米字格（默认），"tianzi" 表示田字格
+            font_style: 字体样式，"zhenkai" 表示正楷（默认），"xingkai" 表示行楷
         """
         self.paper_width, self.paper_height = paper_size
         self.grid_cols = grid_cols
         self.grid_rows = grid_rows
         self.font_size = font_size
+        
+        self.grid_type = grid_type
+        self.font_style = font_style
         
         self.margin_left = 20 * mm
         self.margin_right = 20 * mm
@@ -1072,7 +1079,16 @@ class CopybookGenerator:
             except:
                 pass
         
-        chinese_fonts = [
+        zhenkai_fonts = [
+            ("/System/Library/Fonts/Kai.ttc", "Kai"),
+            ("/System/Library/Fonts/STKaiti.ttc", "STKaiti"),
+        ]
+        
+        xingkai_fonts = [
+            ("/System/Library/Fonts/STXingkai.ttc", "STXingkai"),
+        ]
+        
+        fallback_fonts = [
             ("/System/Library/Fonts/STHeiti Light.ttc", "STHeitiLight"),
             ("/System/Library/Fonts/STHeiti Medium.ttc", "STHeitiMedium"),
             ("/System/Library/Fonts/Hiragino Sans GB.ttc", "HiraginoSansGB"),
@@ -1080,14 +1096,20 @@ class CopybookGenerator:
             ("/System/Library/Fonts/ヒラギノ丸ゴ ProN W4.ttc", "HiraginoMaruGothic"),
         ]
         
-        for font_path, font_name in chinese_fonts:
-            try:
-                if os.path.exists(font_path):
-                    pdfmetrics.registerFont(TTFont(font_name, font_path))
-                    self.font_name = font_name
-                    return
-            except:
-                continue
+        if self.font_style == "xingkai":
+            font_lists = [xingkai_fonts, zhenkai_fonts, fallback_fonts]
+        else:
+            font_lists = [zhenkai_fonts, xingkai_fonts, fallback_fonts]
+        
+        for font_list in font_lists:
+            for font_path, font_name in font_list:
+                try:
+                    if os.path.exists(font_path):
+                        pdfmetrics.registerFont(TTFont(font_name, font_path))
+                        self.font_name = font_name
+                        return
+                except:
+                    continue
         
         self.font_name = "Helvetica"
     
@@ -2165,8 +2187,10 @@ class CopybookGenerator:
         
         c.line(x, y + grid_size/2, x + grid_size, y + grid_size/2)
         c.line(x + grid_size/2, y, x + grid_size/2, y + grid_size)
-        c.line(x, y, x + grid_size, y + grid_size)
-        c.line(x + grid_size, y, x, y + grid_size)
+        
+        if self.grid_type == "mizi":
+            c.line(x, y, x + grid_size, y + grid_size)
+            c.line(x + grid_size, y, x, y + grid_size)
         
         c.setStrokeColor(gray)
         c.setLineWidth(1)
@@ -2183,8 +2207,6 @@ class CopybookGenerator:
             text_y = y + (grid_size - self.font_size) / 2 + 5
             
             c.drawString(text_x, text_y, character)
-            
-            self._draw_stroke_order_standard(c, character, x, y, grid_size)
             
             c.setStrokeColor(gray)
             c.setLineWidth(1)
@@ -2266,21 +2288,30 @@ class CopybookGenerator:
 
 def main():
     """主函数"""
-    if len(sys.argv) < 3:
-        print("用法: python copybook_generator.py <汉字> <输出文件路径> [页数]")
-        print("示例: python copybook_generator.py 永 永字练习.pdf 2")
-        sys.exit(1)
+    import argparse
     
-    character = sys.argv[1]
-    output_path = sys.argv[2]
-    num_pages = int(sys.argv[3]) if len(sys.argv) > 3 else 1
+    parser = argparse.ArgumentParser(description='字帖生成器 - 生成田字格或米字格字帖')
+    parser.add_argument('character', help='要生成字帖的汉字（单个汉字）')
+    parser.add_argument('output_path', help='输出PDF文件路径')
+    parser.add_argument('-p', '--pages', type=int, default=1, help='生成页数（默认：1）')
+    parser.add_argument('-g', '--grid-type', choices=['mizi', 'tianzi'], default='mizi', 
+                        help='格子类型：mizi（米字格，默认）或 tianzi（田字格）')
+    parser.add_argument('-f', '--font-style', choices=['zhenkai', 'xingkai'], default='zhenkai',
+                        help='字体样式：zhenkai（正楷，默认）或 xingkai（行楷）')
     
-    generator = CopybookGenerator()
+    args = parser.parse_args()
     
-    success, message = generator.generate(character, output_path, num_pages)
+    generator = CopybookGenerator(
+        grid_type=args.grid_type,
+        font_style=args.font_style
+    )
+    
+    success, message = generator.generate(args.character, args.output_path, args.pages)
     
     if success:
         print(f"✓ {message}")
+        print(f"  格子类型：{'米字格' if args.grid_type == 'mizi' else '田字格'}")
+        print(f"  字体样式：{'正楷' if args.font_style == 'zhenkai' else '行楷'}")
         sys.exit(0)
     else:
         print(f"✗ {message}")
