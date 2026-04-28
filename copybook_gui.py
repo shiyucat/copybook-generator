@@ -231,37 +231,24 @@ class CopybookGUI:
             self._schedule_update()
             return
         
-        self._clean_student_info()
         self._validate_and_update_preview()
     
-    def _clean_student_info(self):
-        """清理学生信息输入框中的无效字符"""
+    def _clean_student_info_entry(self, entry: tk.Entry, validator_func):
+        """清理单个输入框中的无效字符，保留光标位置"""
         try:
-            current_name = self.student_name_var.get()
-            cleaned_name = StudentInfoValidator.clean_name(current_name)
-            if cleaned_name != current_name:
-                self.student_name_var.set(cleaned_name)
-                self.student_name_entry.icursor(tk.END)
+            cursor_pos = entry.index(tk.INSERT)
+            current_text = entry.get()
+            cleaned_text = validator_func(current_text)
+            
+            if cleaned_text != current_text:
+                removed_chars = len(current_text) - len(cleaned_text)
+                new_cursor_pos = max(0, cursor_pos - removed_chars)
+                
+                entry.delete(0, tk.END)
+                entry.insert(0, cleaned_text)
+                entry.icursor(new_cursor_pos)
         except Exception as e:
-            print(f"清理姓名时出错: {e}")
-        
-        try:
-            current_class = self.student_class_var.get()
-            cleaned_class = StudentInfoValidator.clean_class(current_class)
-            if cleaned_class != current_class:
-                self.student_class_var.set(cleaned_class)
-                self.student_class_entry.icursor(tk.END)
-        except Exception as e:
-            print(f"清理班级时出错: {e}")
-        
-        try:
-            current_id = self.student_id_var.get()
-            cleaned_id = StudentInfoValidator.clean_student_id(current_id)
-            if cleaned_id != current_id:
-                self.student_id_var.set(cleaned_id)
-                self.student_id_entry.icursor(tk.END)
-        except Exception as e:
-            print(f"清理学号时出错: {e}")
+            print(f"清理输入框时出错: {e}")
     
     def _validate_and_update_preview(self):
         """验证学生信息并更新预览"""
@@ -272,19 +259,26 @@ class CopybookGUI:
         valid, error_msg = StudentInfoValidator.is_valid_name(name)
         if not valid:
             self.validation_label.config(text=error_msg)
+            self._clean_student_info_entry(self.student_name_entry, StudentInfoValidator.clean_name)
             return
         
         valid, error_msg = StudentInfoValidator.is_valid_class(class_name)
         if not valid:
             self.validation_label.config(text=error_msg)
+            self._clean_student_info_entry(self.student_class_entry, StudentInfoValidator.clean_class)
             return
         
         valid, error_msg = StudentInfoValidator.is_valid_student_id(student_id)
         if not valid:
             self.validation_label.config(text=error_msg)
+            self._clean_student_info_entry(self.student_id_entry, StudentInfoValidator.clean_student_id)
             return
         
         self.validation_label.config(text="")
+        
+        name = self.student_name_var.get()
+        class_name = self.student_class_var.get()
+        student_id = self.student_id_var.get()
         
         self.preview.set_student_info(name, class_name, student_id)
         self._schedule_update()
