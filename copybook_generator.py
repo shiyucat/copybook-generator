@@ -383,10 +383,40 @@ class CopybookPreview:
             except Exception:
                 pass
     
+    def _get_student_info_height(self) -> int:
+        """
+        计算学生信息区域所需的高度
+        
+        Returns:
+            学生信息区域的高度（像素）
+        """
+        if not self.student_info.has_info():
+            return 0
+        
+        info_items = 0
+        if self.student_info.name:
+            info_items += 1
+        if self.student_info.class_name:
+            info_items += 1
+        if self.student_info.student_id:
+            info_items += 1
+        
+        if info_items == 0:
+            return 0
+        
+        info_font_size = 16
+        line_height = info_font_size + 10
+        margin = 20
+        
+        return margin * 2 + info_items * line_height
+    
     def _calculate_layout(self, page_width: int, page_height: int):
         """计算排版参数"""
+        student_info_height = self._get_student_info_height()
+        available_height = page_height - student_info_height - self.grid_padding
+        
         cols = max(1, (page_width - self.grid_padding * 2) // (self.grid_size + self.grid_padding))
-        max_rows_per_page = max(1, (page_height - self.grid_padding * 2) // (self.grid_size + self.grid_padding))
+        max_rows_per_page = max(1, (available_height - self.grid_padding) // (self.grid_size + self.grid_padding))
         return cols, max_rows_per_page
     
     def _generate_page_image(self, characters: List[str], start_char_index: int,
@@ -409,6 +439,9 @@ class CopybookPreview:
         img = Image.new('RGB', (page_width, page_height), (255, 255, 255))
         draw = ImageDraw.Draw(img)
         
+        student_info_height = self._get_student_info_height()
+        grid_start_y = student_info_height + self.grid_padding
+        
         total_chars = len(characters)
         char_index = start_char_index
         
@@ -416,7 +449,7 @@ class CopybookPreview:
             if char_index >= total_chars:
                 for col in range(cols):
                     x = self.grid_padding + col * (self.grid_size + self.grid_padding)
-                    y = self.grid_padding + row_in_page * (self.grid_size + self.grid_padding)
+                    y = grid_start_y + row_in_page * (self.grid_size + self.grid_padding)
                     if x + self.grid_size <= page_width and y + self.grid_size <= page_height:
                         self.draw_grid(draw, x, y, grid_type, "", False)
                 continue
@@ -425,7 +458,7 @@ class CopybookPreview:
             
             for col in range(cols):
                 x = self.grid_padding + col * (self.grid_size + self.grid_padding)
-                y = self.grid_padding + row_in_page * (self.grid_size + self.grid_padding)
+                y = grid_start_y + row_in_page * (self.grid_size + self.grid_padding)
                 
                 if x + self.grid_size > page_width or y + self.grid_size > page_height:
                     continue
