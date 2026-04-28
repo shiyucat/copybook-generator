@@ -15,15 +15,13 @@ from pathlib import Path
 from typing import List, Tuple, Optional
 
 import tkinter as tk
-from tkinter import ttk, simpledialog, messagebox, filedialog
+from tkinter import ttk, messagebox, filedialog
 from PIL import Image, ImageDraw, ImageFont, ImageTk
 
 try:
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.units import mm
     from reportlab.pdfgen import canvas
-    from reportlab.pdfbase import pdfmetrics
-    from reportlab.pdfbase.ttfonts import TTFont
     REPORTLAB_AVAILABLE = True
 except ImportError:
     REPORTLAB_AVAILABLE = False
@@ -44,13 +42,14 @@ class CopybookPreview:
         self.grid_size = 60
         self.grid_padding = 5
         self.font_size = 40
-        self.available_fonts = []
-        self.font_path = None
-        self._init_available_fonts()
         self._init_font()
         
-    def _init_available_fonts(self):
-        """初始化可用字体列表"""
+    def _init_font(self):
+        """初始化字体"""
+        self.font = None
+        self.font_name = "Default"
+        self.font_path = None
+        
         font_dirs = [
             Path(__file__).parent / "fonts",
             Path.home() / "Library" / "Fonts",
@@ -60,17 +59,11 @@ class CopybookPreview:
         ]
         
         font_patterns = [
-            "STXINGKA.ttf", "STXingkai.ttc", "Xingkai.ttc", "行楷.ttc",
-            "simxingkai.ttf", "华文行楷.ttf", "华文行楷.ttc",
-            "Kai.ttc", "STKaiti.ttc", "KaiTi.ttc", "楷体.ttc", 
-            "simkai.ttf", "Kai.ttf", "STKaiti.ttf", "KaiTi.ttf", "楷体.ttf",
+            "STXINGKA.ttf", "Kai.ttc", "STKaiti.ttc", "KaiTi.ttc", 
+            "simkai.ttf", "Kai.ttf", "STKaiti.ttf", "KaiTi.ttf",
             "Songti.ttc", "STHeiti Light.ttc", "STHeiti Medium.ttc",
-            "Hiragino Sans GB.ttc", "ヒラギノ明朝 ProN.ttc",
-            "ヒラギノ丸ゴ ProN W4.ttc",
+            "Hiragino Sans GB.ttc",
         ]
-        
-        found_fonts = set()
-        self.available_fonts = []
         
         for font_dir in font_dirs:
             if not font_dir.exists():
@@ -78,58 +71,13 @@ class CopybookPreview:
             for pattern in font_patterns:
                 font_file = font_dir / pattern
                 if font_file.exists():
-                    font_key = font_file.name.lower()
-                    if font_key not in found_fonts:
-                        found_fonts.add(font_key)
-                        display_name = font_file.name
-                        if display_name.lower().startswith('stxingkai') or 'xingkai' in display_name.lower() or '行楷' in display_name:
-                            display_name = f"行楷 ({font_file.name})"
-                        elif 'kai' in display_name.lower() or '楷' in display_name:
-                            display_name = f"楷体 ({font_file.name})"
-                        elif 'song' in display_name.lower() or '宋' in display_name:
-                            display_name = f"宋体 ({font_file.name})"
-                        elif 'heiti' in display_name.lower() or '黑' in display_name:
-                            display_name = f"黑体 ({font_file.name})"
-                        elif 'hiragino' in display_name.lower() or '冬青' in display_name or 'ヒラギノ' in display_name:
-                            display_name = f"冬青黑体 ({font_file.name})"
-                        self.available_fonts.append({
-                            'display_name': display_name,
-                            'file_name': font_file.name,
-                            'path': str(font_file)
-                        })
-    
-    def get_available_fonts(self):
-        """获取可用字体列表"""
-        return self.available_fonts
-    
-    def set_font(self, font_index: int):
-        """设置字体"""
-        if 0 <= font_index < len(self.available_fonts):
-            font_info = self.available_fonts[font_index]
-            try:
-                self.font = ImageFont.truetype(font_info['path'], self.font_size)
-                self.font_name = font_info['file_name']
-                self.font_path = font_info['path']
-                return True
-            except Exception:
-                pass
-        return False
-        
-    def _init_font(self):
-        """初始化默认字体"""
-        self.font = None
-        self.font_name = "Default"
-        self.font_path = None
-        
-        if self.available_fonts:
-            try:
-                font_info = self.available_fonts[0]
-                self.font = ImageFont.truetype(font_info['path'], self.font_size)
-                self.font_name = font_info['file_name']
-                self.font_path = font_info['path']
-                return
-            except Exception:
-                pass
+                    try:
+                        self.font = ImageFont.truetype(str(font_file), self.font_size)
+                        self.font_name = pattern
+                        self.font_path = str(font_file)
+                        return
+                    except Exception:
+                        continue
         
         try:
             self.font = ImageFont.load_default()
@@ -186,56 +134,51 @@ class CopybookPreview:
             except Exception:
                 pass
     
-    def generate_preview(self, characters: List[str], grid_type: str, 
-                         preview_width: int, preview_height: int) -> Image.Image:
+    def _calculate_layout(self, page_width: int, page_height: int):
+        """计算排版参数"""
+        cols = max(1, (page_width - self.grid_padding * 2) // (self.grid_size + self.grid_padding))
+        max_rows_per_page = max(1, (page_height - self.grid_padding * 2) // (self.grid_size + self.grid_padding))
+        return cols, max_rows_per_page
+    
+    def _generate_page_image(self, characters: List[str], start_char_index: int,
+                            grid_type: str, page_width: int, page_height: int) -> Tuple[Image.Image, int]:
         """
-        生成预览图像
-        
-        排版规则：
-        - 按"从左到右、从上到下"排版
-        - 每个字占一行
-        - 每行第一个字为模版字（灰色背景）
-        - 支持自动换行分页
+        生成单页图像
         
         Args:
             characters: 字符列表
+            start_char_index: 起始字符索引
             grid_type: 格子类型
-            preview_width: 预览区域宽度
-            preview_height: 预览区域高度
+            page_width: 页面宽度
+            page_height: 页面高度
             
         Returns:
-            PIL Image对象
+            (图像对象, 下一页起始字符索引)
         """
-        cols = max(1, (preview_width - self.grid_padding * 2) // (self.grid_size + self.grid_padding))
-        max_rows = max(1, (preview_height - self.grid_padding * 2) // (self.grid_size + self.grid_padding))
+        cols, max_rows_per_page = self._calculate_layout(page_width, page_height)
         
-        img_width = preview_width
-        img_height = preview_height
-        
-        img = Image.new('RGB', (img_width, img_height), (255, 255, 255))
+        img = Image.new('RGB', (page_width, page_height), (255, 255, 255))
         draw = ImageDraw.Draw(img)
         
-        if not characters:
-            for row in range(max_rows):
+        total_chars = len(characters)
+        char_index = start_char_index
+        
+        for row_in_page in range(max_rows_per_page):
+            if char_index >= total_chars:
                 for col in range(cols):
                     x = self.grid_padding + col * (self.grid_size + self.grid_padding)
-                    y = self.grid_padding + row * (self.grid_size + self.grid_padding)
-                    if x + self.grid_size <= preview_width and y + self.grid_size <= preview_height:
-                        self.draw_grid(draw, x, y, grid_type)
-            return img
-        
-        row_index = 0
-        char_index = 0
-        total_chars = len(characters)
-        
-        while char_index < total_chars and row_index < max_rows:
+                    y = self.grid_padding + row_in_page * (self.grid_size + self.grid_padding)
+                    if x + self.grid_size <= page_width and y + self.grid_size <= page_height:
+                        self.draw_grid(draw, x, y, grid_type, "", False)
+                continue
+            
             current_char = characters[char_index]
             
             for col in range(cols):
                 x = self.grid_padding + col * (self.grid_size + self.grid_padding)
-                y = self.grid_padding + row_index * (self.grid_size + self.grid_padding)
+                y = self.grid_padding + row_in_page * (self.grid_size + self.grid_padding)
                 
-                if x + self.grid_size > preview_width or y + self.grid_size > preview_height:
+                if x + self.grid_size > page_width or y + self.grid_size > page_height:
                     continue
                 
                 is_template = (col == 0)
@@ -245,11 +188,61 @@ class CopybookPreview:
                     self.draw_grid(draw, x, y, grid_type, "", False)
             
             char_index += 1
-            row_index += 1
         
+        return img, char_index
+    
+    def generate_preview_page(self, characters: List[str], page_number: int,
+                              grid_type: str, page_width: int, page_height: int) -> Optional[Image.Image]:
+        """
+        生成指定页码的预览图像
+        
+        Args:
+            characters: 字符列表
+            page_number: 页码（从1开始）
+            grid_type: 格子类型
+            page_width: 页面宽度
+            page_height: 页面高度
+            
+        Returns:
+            PIL Image对象，如果页码超出范围则返回None
+        """
+        if page_number < 1:
+            return None
+        
+        cols, max_rows_per_page = self._calculate_layout(page_width, page_height)
+        chars_per_page = max_rows_per_page
+        
+        total_pages = self.calculate_total_pages(characters, page_width, page_height)
+        
+        if page_number > total_pages:
+            return None
+        
+        start_char_index = (page_number - 1) * chars_per_page
+        
+        img, _ = self._generate_page_image(characters, start_char_index, grid_type, page_width, page_height)
         return img
     
-    def generate_all_pages(self, characters: List[str], grid_type: str, 
+    def calculate_total_pages(self, characters: List[str], page_width: int, page_height: int) -> int:
+        """
+        计算总页数
+        
+        Args:
+            characters: 字符列表
+            page_width: 页面宽度
+            page_height: 页面高度
+            
+        Returns:
+            总页数
+        """
+        if not characters:
+            return 1
+        
+        _, max_rows_per_page = self._calculate_layout(page_width, page_height)
+        chars_per_page = max_rows_per_page
+        
+        return max(1, (len(characters) + chars_per_page - 1) // chars_per_page)
+    
+    def generate_all_pages(self, characters: List[str], grid_type: str,
                            page_width: int, page_height: int) -> List[Image.Image]:
         """
         生成所有页面的图像（用于PDF导出）
@@ -263,44 +256,20 @@ class CopybookPreview:
         Returns:
             PIL Image对象列表，每个元素是一页
         """
-        cols = max(1, (page_width - self.grid_padding * 2) // (self.grid_size + self.grid_padding))
-        max_rows_per_page = max(1, (page_height - self.grid_padding * 2) // (self.grid_size + self.grid_padding))
-        
         pages = []
         total_chars = len(characters)
         char_index = 0
         
-        while char_index < total_chars:
-            img = Image.new('RGB', (page_width, page_height), (255, 255, 255))
-            draw = ImageDraw.Draw(img)
-            
-            for row_in_page in range(max_rows_per_page):
-                if char_index >= total_chars:
-                    for col in range(cols):
-                        x = self.grid_padding + col * (self.grid_size + self.grid_padding)
-                        y = self.grid_padding + row_in_page * (self.grid_size + self.grid_padding)
-                        if x + self.grid_size <= page_width and y + self.grid_size <= page_height:
-                            self.draw_grid(draw, x, y, grid_type, "", False)
-                    continue
-                
-                current_char = characters[char_index]
-                
-                for col in range(cols):
-                    x = self.grid_padding + col * (self.grid_size + self.grid_padding)
-                    y = self.grid_padding + row_in_page * (self.grid_size + self.grid_padding)
-                    
-                    if x + self.grid_size > page_width or y + self.grid_size > page_height:
-                        continue
-                    
-                    is_template = (col == 0)
-                    if is_template:
-                        self.draw_grid(draw, x, y, grid_type, current_char, is_template)
-                    else:
-                        self.draw_grid(draw, x, y, grid_type, "", False)
-                
-                char_index += 1
-            
+        while total_chars == 0 or char_index < total_chars:
+            img, next_char_index = self._generate_page_image(characters, char_index, grid_type, page_width, page_height)
             pages.append(img)
+            
+            if total_chars == 0:
+                break
+            
+            if next_char_index >= total_chars:
+                break
+            char_index = next_char_index
         
         return pages
     
@@ -381,6 +350,9 @@ class CopybookGUI:
         self.debounce_job = None
         self.debounce_delay = 200
         
+        self.current_page = 1
+        self.total_pages = 1
+        
         self._create_ui()
         self._bind_events()
         self._schedule_initial_update()
@@ -425,20 +397,6 @@ class CopybookGUI:
                                   command=self._on_grid_type_change)
             rb.pack(anchor="w", pady=2)
         
-        font_label_frame = ttk.LabelFrame(left_frame, text="字体选择", padding=5)
-        font_label_frame.pack(fill=tk.X, pady=(10, 0))
-        
-        self.font_var = tk.StringVar()
-        available_fonts = self.preview.get_available_fonts()
-        font_names = [f['display_name'] for f in available_fonts]
-        
-        self.font_combobox = ttk.Combobox(font_label_frame, textvariable=self.font_var, 
-                                             values=font_names, state="readonly", width=25)
-        self.font_combobox.pack(fill=tk.X, pady=2)
-        
-        if font_names:
-            self.font_combobox.current(0)
-        
         export_label_frame = ttk.LabelFrame(left_frame, text="导出", padding=5)
         export_label_frame.pack(fill=tk.X, pady=(10, 0))
         
@@ -457,12 +415,46 @@ class CopybookGUI:
         
         preview_frame = ttk.Frame(self.root, relief=tk.SOLID, borderwidth=1)
         preview_frame.grid(row=0, column=2, sticky="nsew", padx=(0, 0), pady=10)
+        preview_frame.rowconfigure(0, weight=0)
+        preview_frame.rowconfigure(1, weight=1)
+        preview_frame.rowconfigure(2, weight=0)
+        preview_frame.columnconfigure(0, weight=1)
         
-        preview_label = ttk.Label(preview_frame, text="预览", font=("Arial", 12, "bold"))
-        preview_label.pack(anchor="w", pady=(5, 5), padx=5)
+        preview_top_frame = ttk.Frame(preview_frame)
+        preview_top_frame.grid(row=0, column=0, sticky="ew", padx=5, pady=(5, 0))
         
-        self.preview_canvas = tk.Canvas(preview_frame, bg="white", highlightthickness=0)
-        self.preview_canvas.pack(fill=tk.BOTH, expand=True, padx=5, pady=(0, 5))
+        preview_label = ttk.Label(preview_top_frame, text="预览", font=("Arial", 12, "bold"))
+        preview_label.pack(side="left")
+        
+        self.page_label = ttk.Label(preview_top_frame, text="第 1 页 / 共 1 页", font=("Arial", 10))
+        self.page_label.pack(side="right")
+        
+        canvas_frame = ttk.Frame(preview_frame)
+        canvas_frame.grid(row=1, column=0, sticky="nsew", padx=5, pady=5)
+        canvas_frame.rowconfigure(0, weight=1)
+        canvas_frame.columnconfigure(0, weight=1)
+        
+        self.preview_canvas = tk.Canvas(canvas_frame, bg="white", highlightthickness=0)
+        self.preview_canvas.grid(row=0, column=0, sticky="nsew")
+        
+        navigation_frame = ttk.Frame(preview_frame)
+        navigation_frame.grid(row=2, column=0, sticky="ew", padx=5, pady=(0, 5))
+        
+        self.prev_button = ttk.Button(navigation_frame, text="上一页", command=self._prev_page)
+        self.prev_button.pack(side="left", padx=(0, 10))
+        
+        self.next_button = ttk.Button(navigation_frame, text="下一页", command=self._next_page)
+        self.next_button.pack(side="left")
+        
+        self.page_entry_label = ttk.Label(navigation_frame, text="跳转到页：", font=("Arial", 10))
+        self.page_entry_label.pack(side="left", padx=(20, 5))
+        
+        self.page_var = tk.StringVar(value="1")
+        self.page_entry = ttk.Entry(navigation_frame, textvariable=self.page_var, width=5)
+        self.page_entry.pack(side="left", padx=(0, 5))
+        
+        self.go_button = ttk.Button(navigation_frame, text="跳转", command=self._go_to_page)
+        self.go_button.pack(side="left")
         
         right_spacer_frame = ttk.Frame(self.root)
         right_spacer_frame.grid(row=0, column=3, sticky="nsew")
@@ -471,7 +463,6 @@ class CopybookGUI:
         """绑定事件"""
         self.input_text.bind("<KeyRelease>", self._on_input_change)
         self.root.bind("<Configure>", self._on_window_resize)
-        self.font_combobox.bind("<<ComboboxSelected>>", self._on_font_change)
         
     def _clean_input(self):
         """清理输入框中的特殊字符"""
@@ -494,23 +485,48 @@ class CopybookGUI:
             return
         
         self._clean_input()
+        self.current_page = 1
         self._schedule_update()
         
     def _on_grid_type_change(self):
         """格子类型变化时的处理"""
         self._schedule_update()
     
-    def _on_font_change(self, event=None):
-        """字体变化时的处理"""
-        selected_index = self.font_combobox.current()
-        if selected_index >= 0:
-            self.preview.set_font(selected_index)
-            self._schedule_update()
-        
     def _on_window_resize(self, event=None):
         """窗口大小变化时的处理"""
         if event and event.widget == self.root:
             self._schedule_update()
+    
+    def _prev_page(self):
+        """上一页"""
+        if self.current_page > 1:
+            self.current_page -= 1
+            self._update_preview()
+    
+    def _next_page(self):
+        """下一页"""
+        if self.current_page < self.total_pages:
+            self.current_page += 1
+            self._update_preview()
+    
+    def _go_to_page(self):
+        """跳转到指定页"""
+        try:
+            page = int(self.page_var.get())
+            if 1 <= page <= self.total_pages:
+                self.current_page = page
+                self._update_preview()
+            else:
+                messagebox.showwarning("提示", f"请输入1到{self.total_pages}之间的页码")
+        except ValueError:
+            messagebox.showwarning("提示", "请输入有效的页码")
+    
+    def _update_navigation_buttons(self):
+        """更新导航按钮状态"""
+        self.prev_button.config(state="normal" if self.current_page > 1 else "disabled")
+        self.next_button.config(state="normal" if self.current_page < self.total_pages else "disabled")
+        self.page_var.set(str(self.current_page))
+        self.page_label.config(text=f"第 {self.current_page} 页 / 共 {self.total_pages} 页")
         
     def _schedule_update(self):
         """调度更新预览（防抖）"""
@@ -536,11 +552,19 @@ class CopybookGUI:
             characters = CopybookPreview.filter_valid_characters(text)
             grid_type = self.grid_type_var.get()
             
-            img = self.preview.generate_preview(characters, grid_type, canvas_width, canvas_height)
+            self.total_pages = self.preview.calculate_total_pages(characters, canvas_width, canvas_height)
             
-            self.preview_image = ImageTk.PhotoImage(img)
-            self.preview_canvas.delete("all")
-            self.preview_canvas.create_image(0, 0, anchor=tk.NW, image=self.preview_image)
+            if self.current_page > self.total_pages:
+                self.current_page = self.total_pages
+            
+            self._update_navigation_buttons()
+            
+            img = self.preview.generate_preview_page(characters, self.current_page, grid_type, canvas_width, canvas_height)
+            
+            if img:
+                self.preview_image = ImageTk.PhotoImage(img)
+                self.preview_canvas.delete("all")
+                self.preview_canvas.create_image(0, 0, anchor=tk.NW, image=self.preview_image)
             
         except Exception as e:
             print(f"更新预览时出错: {e}")
@@ -560,22 +584,11 @@ class CopybookGUI:
             messagebox.showwarning("提示", "请先输入要生成字帖的文字")
             return
         
-        default_filename = datetime.now().strftime("%Y%m%d_%H%M%S")
-        
-        filename = simpledialog.askstring("导出 PDF", "请输入文件名:", initialvalue=default_filename)
-        
-        if filename is None:
-            return
-        
-        if not filename:
-            filename = default_filename
-        
-        if not filename.lower().endswith('.pdf'):
-            filename = filename + '.pdf'
+        default_filename = datetime.now().strftime("%Y%m%d_%H%M%S") + ".pdf"
         
         save_path = filedialog.asksaveasfilename(
             title="保存 PDF",
-            initialfile=filename,
+            initialfile=default_filename,
             defaultextension=".pdf",
             filetypes=[("PDF 文件", "*.pdf"), ("所有文件", "*.*")]
         )
@@ -584,8 +597,6 @@ class CopybookGUI:
             return
         
         try:
-            canvas_width, canvas_height = int(A4[0]), int(A4[1])
-            
             page_width = int(A4[0] - 20 * mm)
             page_height = int(A4[1] - 20 * mm)
             
@@ -594,41 +605,34 @@ class CopybookGUI:
             
             c = canvas.Canvas(save_path, pagesize=A4)
             
-            font_path = self.preview.font_path
-            font_name = "Helvetica"
-            
-            if font_path and os.path.exists(font_path):
-                try:
-                    pdfmetrics.registerFont(TTFont("CustomFont", font_path))
-                    font_name = "CustomFont"
-                except:
-                    pass
-            
             margin_x = 10 * mm
             margin_y = 10 * mm
             
-            for page_idx, page_img in enumerate(pages):
-                if page_idx > 0:
-                    c.showPage()
-                
-                temp_img_path = None
-                try:
-                    temp_img_path = os.path.join(os.path.dirname(save_path), f"_temp_page_{page_idx}.png")
+            temp_files = []
+            try:
+                for page_idx, page_img in enumerate(pages):
+                    if page_idx > 0:
+                        c.showPage()
+                    
+                    temp_img_path = os.path.join(os.path.dirname(save_path), f"_temp_copybook_page_{page_idx}.png")
                     page_img.save(temp_img_path, "PNG")
+                    temp_files.append(temp_img_path)
                     
                     c.drawImage(temp_img_path, margin_x, margin_y, 
                                 width=page_width, height=page_height, 
                                 preserveAspectRatio=True)
-                finally:
-                    if temp_img_path and os.path.exists(temp_img_path):
+                
+                c.save()
+                
+                messagebox.showinfo("成功", f"PDF 已成功导出:\n{save_path}")
+                
+            finally:
+                for temp_file in temp_files:
+                    if os.path.exists(temp_file):
                         try:
-                            os.remove(temp_img_path)
+                            os.remove(temp_file)
                         except:
                             pass
-            
-            c.save()
-            
-            messagebox.showinfo("成功", f"PDF 已成功导出:\n{save_path}")
             
         except Exception as e:
             messagebox.showerror("错误", f"导出 PDF 时出错:\n{str(e)}")
