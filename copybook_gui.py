@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import List, Tuple, Optional
 
 import tkinter as tk
-from tkinter import ttk, font
+from tkinter import ttk
 from PIL import Image, ImageDraw, ImageFont, ImageTk
 
 
@@ -27,7 +27,7 @@ class GridType:
 
 
 class CopybookPreview:
-    """字帖预览绘制器"""
+    """字帖预览绘制器 - 核心业务逻辑"""
     
     def __init__(self):
         self.grid_size = 60
@@ -182,10 +182,31 @@ class CopybookPreview:
             row_index += 1
         
         return img
+    
+    @staticmethod
+    def filter_valid_characters(text: str) -> List[str]:
+        """
+        过滤有效字符
+        
+        Args:
+            text: 输入的原始文本
+            
+        Returns:
+            有效字符列表（只包含中文、英文、数字）
+        """
+        valid_chars = []
+        
+        for char in text:
+            if re.match(r'^[\u4e00-\u9fff\u3400-\u4dbf]$', char):
+                valid_chars.append(char)
+            elif re.match(r'^[a-zA-Z0-9]$', char):
+                valid_chars.append(char)
+        
+        return valid_chars
 
 
 class CopybookGUI:
-    """字帖生成器 GUI 主类"""
+    """字帖生成器 GUI 主类 - 负责界面交互"""
     
     def __init__(self, root: tk.Tk):
         self.root = root
@@ -212,30 +233,22 @@ class CopybookGUI:
         main_frame.columnconfigure(3, weight=1)
         main_frame.rowconfigure(0, weight=1)
         
-        left_frame = ttk.Frame(main_frame)
-        left_frame.grid(row=0, column=0, sticky="nsew", padx=(10, 0), pady=10)
-        left_frame.columnconfigure(0, weight=1)
-        left_frame.rowconfigure(1, weight=3)
-        left_frame.rowconfigure(2, weight=0)
+        left_frame = ttk.Frame(main_frame, padding=10)
+        left_frame.grid(row=0, column=0, sticky="nsew")
         
         input_label = ttk.Label(left_frame, text="输入文字", font=("Arial", 12, "bold"))
-        input_label.grid(row=0, column=0, sticky="w", pady=(0, 5))
+        input_label.pack(anchor="w", pady=(0, 5))
         
-        input_frame = ttk.Frame(left_frame)
-        input_frame.grid(row=1, column=0, sticky="nsew", pady=(0, 10))
-        input_frame.columnconfigure(0, weight=1)
-        input_frame.rowconfigure(0, weight=1)
-        
-        self.input_text = tk.Text(input_frame, wrap=tk.WORD, font=("Arial", 14), 
-                                   relief=tk.SOLID, borderwidth=1)
-        self.input_text.grid(row=0, column=0, sticky="nsew")
+        self.input_text = tk.Text(left_frame, wrap=tk.WORD, font=("Arial", 14), 
+                                   relief=tk.SOLID, borderwidth=1, height=10)
+        self.input_text.pack(fill=tk.X, pady=(0, 10))
         
         input_hint = ttk.Label(left_frame, text="支持：中文、英文、数字\n空格和换行不占格\n不支持：标点符号、特殊字符", 
                                 foreground="gray", font=("Arial", 10), justify="left")
-        input_hint.grid(row=2, column=0, sticky="w", pady=(0, 10))
+        input_hint.pack(anchor="w", pady=(0, 10))
         
         grid_label_frame = ttk.LabelFrame(left_frame, text="格子类型", padding=5)
-        grid_label_frame.grid(row=3, column=0, sticky="ew", pady=(0, 0))
+        grid_label_frame.pack(fill=tk.X, pady=(0, 0))
         
         self.grid_type_var = tk.StringVar(value=GridType.TIANZI)
         
@@ -248,7 +261,8 @@ class CopybookGUI:
         
         for value, text in grid_types:
             rb = ttk.Radiobutton(grid_label_frame, text=text, value=value, 
-                                  variable=self.grid_type_var)
+                                  variable=self.grid_type_var,
+                                  command=self._on_grid_type_change)
             rb.pack(anchor="w", pady=2)
         
         spacer_frame = ttk.Frame(main_frame)
@@ -269,31 +283,13 @@ class CopybookGUI:
     def _bind_events(self):
         """绑定事件"""
         self.input_text.bind("<KeyRelease>", self._on_input_change)
-        self.grid_type_var.trace("w", self._on_grid_type_change)
         self.root.bind("<Configure>", self._on_window_resize)
-        self.input_text.bind("<Key>", self._validate_input)
-        
-    def _validate_input(self, event: tk.Event):
-        """验证输入"""
-        if event.char:
-            if re.match(r'^[\u4e00-\u9fff\u3400-\u4dbf\s\n]$', event.char):
-                return
-            
-            if re.match(r'^[a-zA-Z0-9]$', event.char):
-                return
-            
-            if event.keysym in ('BackSpace', 'Delete', 'Left', 'Right', 'Up', 'Down', 
-                                'Return', 'Tab', 'Home', 'End', 'Shift_L', 'Shift_R',
-                                'Control_L', 'Control_R', 'Alt_L', 'Alt_R', 'Caps_Lock'):
-                return
-            
-            return "break"
         
     def _on_input_change(self, event=None):
         """输入变化时的处理"""
         self._schedule_update()
         
-    def _on_grid_type_change(self, *args):
+    def _on_grid_type_change(self):
         """格子类型变化时的处理"""
         self._schedule_update()
         
@@ -303,7 +299,7 @@ class CopybookGUI:
             self._schedule_update()
         
     def _schedule_update(self):
-        """调度更新预览"""
+        """调度更新预览（防抖）"""
         if self.debounce_job:
             self.root.after_cancel(self.debounce_job)
         self.debounce_job = self.root.after(self.debounce_delay, self._update_preview)
@@ -311,19 +307,6 @@ class CopybookGUI:
     def _schedule_initial_update(self):
         """调度初始更新"""
         self.root.after(100, self._update_preview)
-        
-    def _get_valid_characters(self) -> List[str]:
-        """获取有效的字符列表"""
-        text = self.input_text.get("1.0", tk.END)
-        valid_chars = []
-        
-        for char in text:
-            if re.match(r'^[\u4e00-\u9fff\u3400-\u4dbf]$', char):
-                valid_chars.append(char)
-            elif re.match(r'^[a-zA-Z0-9]$', char):
-                valid_chars.append(char)
-        
-        return valid_chars
         
     def _update_preview(self):
         """更新预览"""
@@ -335,7 +318,8 @@ class CopybookGUI:
                 self.root.after(100, self._update_preview)
                 return
             
-            characters = self._get_valid_characters()
+            text = self.input_text.get("1.0", tk.END)
+            characters = CopybookPreview.filter_valid_characters(text)
             grid_type = self.grid_type_var.get()
             
             img = self.preview.generate_preview(characters, grid_type, canvas_width, canvas_height)
