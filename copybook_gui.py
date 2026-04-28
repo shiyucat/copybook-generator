@@ -186,7 +186,7 @@ class CopybookPreview:
     @staticmethod
     def filter_valid_characters(text: str) -> List[str]:
         """
-        过滤有效字符
+        过滤有效字符（用于预览生成）
         
         Args:
             text: 输入的原始文本
@@ -203,6 +203,48 @@ class CopybookPreview:
                 valid_chars.append(char)
         
         return valid_chars
+    
+    @staticmethod
+    def is_allowed_character(char: str) -> bool:
+        """
+        检查字符是否允许输入
+        
+        允许的字符：
+        - 中文：\u4e00-\u9fff, \u3400-\u4dbf
+        - 英文：a-z, A-Z
+        - 数字：0-9
+        - 空格和换行（不占格但允许输入）
+        
+        Args:
+            char: 要检查的字符
+            
+        Returns:
+            是否允许输入
+        """
+        if re.match(r'^[\u4e00-\u9fff\u3400-\u4dbf]$', char):
+            return True
+        
+        if re.match(r'^[a-zA-Z0-9\s\n]$', char):
+            return True
+        
+        return False
+    
+    @staticmethod
+    def clean_input_text(text: str) -> str:
+        """
+        清理输入文本，移除不允许的字符
+        
+        Args:
+            text: 原始输入文本
+            
+        Returns:
+            清理后的文本
+        """
+        cleaned = []
+        for char in text:
+            if CopybookPreview.is_allowed_character(char):
+                cleaned.append(char)
+        return ''.join(cleaned)
 
 
 class CopybookGUI:
@@ -224,17 +266,14 @@ class CopybookGUI:
         
     def _create_ui(self):
         """创建UI界面"""
-        main_frame = ttk.Frame(self.root)
-        main_frame.pack(fill=tk.BOTH, expand=True, padx=0, pady=0)
+        self.root.columnconfigure(0, weight=2)
+        self.root.columnconfigure(1, weight=1)
+        self.root.columnconfigure(2, weight=6)
+        self.root.columnconfigure(3, weight=1)
+        self.root.rowconfigure(0, weight=1)
         
-        main_frame.columnconfigure(0, weight=2)
-        main_frame.columnconfigure(1, weight=1)
-        main_frame.columnconfigure(2, weight=6)
-        main_frame.columnconfigure(3, weight=1)
-        main_frame.rowconfigure(0, weight=1)
-        
-        left_frame = ttk.Frame(main_frame, padding=10)
-        left_frame.grid(row=0, column=0, sticky="nsew")
+        left_frame = ttk.Frame(self.root)
+        left_frame.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
         
         input_label = ttk.Label(left_frame, text="输入文字", font=("Arial", 12, "bold"))
         input_label.pack(anchor="w", pady=(0, 5))
@@ -265,10 +304,10 @@ class CopybookGUI:
                                   command=self._on_grid_type_change)
             rb.pack(anchor="w", pady=2)
         
-        spacer_frame = ttk.Frame(main_frame)
+        spacer_frame = ttk.Frame(self.root)
         spacer_frame.grid(row=0, column=1, sticky="nsew")
         
-        preview_frame = ttk.Frame(main_frame, relief=tk.SOLID, borderwidth=1)
+        preview_frame = ttk.Frame(self.root, relief=tk.SOLID, borderwidth=1)
         preview_frame.grid(row=0, column=2, sticky="nsew", padx=(0, 0), pady=10)
         
         preview_label = ttk.Label(preview_frame, text="预览", font=("Arial", 12, "bold"))
@@ -277,7 +316,7 @@ class CopybookGUI:
         self.preview_canvas = tk.Canvas(preview_frame, bg="white", highlightthickness=0)
         self.preview_canvas.pack(fill=tk.BOTH, expand=True, padx=5, pady=(0, 5))
         
-        right_spacer_frame = ttk.Frame(main_frame)
+        right_spacer_frame = ttk.Frame(self.root)
         right_spacer_frame.grid(row=0, column=3, sticky="nsew")
         
     def _bind_events(self):
@@ -285,8 +324,27 @@ class CopybookGUI:
         self.input_text.bind("<KeyRelease>", self._on_input_change)
         self.root.bind("<Configure>", self._on_window_resize)
         
+    def _clean_input(self):
+        """清理输入框中的特殊字符"""
+        try:
+            current_text = self.input_text.get("1.0", tk.END)
+            cleaned_text = CopybookPreview.clean_input_text(current_text)
+            
+            if cleaned_text != current_text:
+                self.input_text.delete("1.0", tk.END)
+                self.input_text.insert("1.0", cleaned_text.rstrip('\n'))
+        except Exception as e:
+            print(f"清理输入时出错: {e}")
+        
     def _on_input_change(self, event=None):
         """输入变化时的处理"""
+        if event and event.keysym in ('Left', 'Right', 'Up', 'Down', 
+                                       'Shift_L', 'Shift_R', 'Control_L', 'Control_R',
+                                       'Alt_L', 'Alt_R', 'Caps_Lock', 'Tab'):
+            self._schedule_update()
+            return
+        
+        self._clean_input()
         self._schedule_update()
         
     def _on_grid_type_change(self):
