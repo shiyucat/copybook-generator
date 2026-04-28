@@ -222,27 +222,29 @@ class CopybookPreview:
             return
         
         info_font_size = 16
-        try:
-            info_font = ImageFont.truetype(self.font_path, info_font_size) if self.font_path else None
-        except:
-            info_font = None
+        info_font = None
+        
+        if self.font and self.font_path:
+            try:
+                info_font = ImageFont.truetype(self.font_path, info_font_size)
+            except Exception as e:
+                print(f"加载学生信息字体失败: {e}")
         
         if info_font is None:
             try:
                 info_font = ImageFont.load_default()
-            except:
-                info_font = None
+            except Exception as e:
+                print(f"加载默认字体失败: {e}")
         
         if info_font is None:
             return
         
-        label_color = (80, 80, 80)
-        value_color = (40, 40, 40)
-        underline_color = (100, 100, 100)
+        label_color = (60, 60, 60)
+        value_color = (30, 30, 30)
+        underline_color = (120, 120, 120)
         
-        margin = 15
-        line_height = info_font_size + 8
-        label_width = 50
+        margin = 20
+        line_height = info_font_size + 10
         
         info_items = []
         if self.student_info.name:
@@ -252,34 +254,44 @@ class CopybookPreview:
         if self.student_info.student_id:
             info_items.append(("学号", self.student_info.student_id))
         
-        total_height = len(info_items) * line_height
         start_y = margin
         
         for i, (label, value) in enumerate(info_items):
             y = start_y + i * line_height
             
-            label_x = page_width - margin - label_width - 100
-            if info_font:
-                try:
-                    draw.text((label_x, y), f"{label}：", font=info_font, fill=label_color)
-                except:
-                    pass
+            label_text = f"{label}："
+            try:
+                bbox = draw.textbbox((0, 0), label_text, font=info_font)
+                label_width = bbox[2] - bbox[0]
+            except:
+                label_width = 50
             
-            value_start_x = label_x + label_width
-            value_width = 100
+            try:
+                bbox = draw.textbbox((0, 0), value or "          ", font=info_font)
+                value_width = max(bbox[2] - bbox[0], 80)
+            except:
+                value_width = 80
+            
+            total_width = label_width + value_width + 10
+            label_x = page_width - margin - total_width
+            value_start_x = label_x + label_width + 10
+            
+            try:
+                draw.text((label_x, y), label_text, font=info_font, fill=label_color)
+            except Exception as e:
+                print(f"绘制标签失败: {e}")
             
             if value:
                 try:
                     draw.text((value_start_x, y), value, font=info_font, fill=value_color)
-                except:
-                    pass
+                except Exception as e:
+                    print(f"绘制值失败: {e}")
             
             try:
-                bbox = draw.textbbox((value_start_x, y), value or "          ", font=info_font) if info_font else (value_start_x, y, value_start_x + value_width, y + info_font_size)
-                underline_y = y + line_height - 3
-                draw.line([(value_start_x, underline_y), (value_start_x + value_width, underline_y)], fill=underline_color, width=1)
-            except:
-                pass
+                underline_y = y + line_height - 2
+                draw.line([(value_start_x, underline_y), (value_start_x + value_width + 20, underline_y)], fill=underline_color, width=1)
+            except Exception as e:
+                print(f"绘制下划线失败: {e}")
         
     def _init_font(self):
         """初始化字体"""
