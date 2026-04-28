@@ -176,9 +176,7 @@ class CopybookPreview:
                     continue
                 
                 is_template = (col == 0)
-                char_to_draw = current_char if is_template else ""
-                
-                self.draw_grid(draw, x, y, grid_type, char_to_draw, is_template)
+                self.draw_grid(draw, x, y, grid_type, current_char, is_template)
             
             char_index += 1
             row_index += 1
@@ -216,20 +214,28 @@ class CopybookGUI:
         
         left_frame = ttk.Frame(main_frame)
         left_frame.grid(row=0, column=0, sticky="nsew", padx=(10, 0), pady=10)
+        left_frame.columnconfigure(0, weight=1)
+        left_frame.rowconfigure(1, weight=3)
+        left_frame.rowconfigure(2, weight=0)
         
         input_label = ttk.Label(left_frame, text="输入文字", font=("Arial", 12, "bold"))
-        input_label.pack(anchor="w", pady=(0, 5))
+        input_label.grid(row=0, column=0, sticky="w", pady=(0, 5))
         
-        self.input_text = tk.Text(left_frame, wrap=tk.WORD, font=("Arial", 14), 
+        input_frame = ttk.Frame(left_frame)
+        input_frame.grid(row=1, column=0, sticky="nsew", pady=(0, 10))
+        input_frame.columnconfigure(0, weight=1)
+        input_frame.rowconfigure(0, weight=1)
+        
+        self.input_text = tk.Text(input_frame, wrap=tk.WORD, font=("Arial", 14), 
                                    relief=tk.SOLID, borderwidth=1)
-        self.input_text.pack(fill=tk.BOTH, expand=True)
+        self.input_text.grid(row=0, column=0, sticky="nsew")
         
         input_hint = ttk.Label(left_frame, text="支持：中文、英文、数字\n空格和换行不占格\n不支持：标点符号、特殊字符", 
                                 foreground="gray", font=("Arial", 10), justify="left")
-        input_hint.pack(anchor="w", pady=(5, 0))
+        input_hint.grid(row=2, column=0, sticky="w", pady=(0, 10))
         
         grid_label_frame = ttk.LabelFrame(left_frame, text="格子类型", padding=5)
-        grid_label_frame.pack(fill=tk.X, pady=(10, 0))
+        grid_label_frame.grid(row=3, column=0, sticky="ew", pady=(0, 0))
         
         self.grid_type_var = tk.StringVar(value=GridType.TIANZI)
         
