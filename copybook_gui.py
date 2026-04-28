@@ -23,7 +23,7 @@ try:
 except ImportError:
     REPORTLAB_AVAILABLE = False
 
-from copybook_generator import GridType, CopybookPreview
+from copybook_generator import GridType, CopybookPreview, StudentInfoValidator
 
 
 class CopybookGUI:
@@ -67,6 +67,42 @@ class CopybookGUI:
         input_hint = ttk.Label(left_frame, text="支持：中文、英文、数字\n空格和换行不占格\n不支持：标点符号、特殊字符", 
                                 foreground="gray", font=("Arial", 10), justify="left")
         input_hint.pack(anchor="w", pady=(0, 10))
+        
+        student_info_frame = ttk.LabelFrame(left_frame, text="学员信息", padding=5)
+        student_info_frame.pack(fill=tk.X, pady=(0, 10))
+        
+        self.student_name_var = tk.StringVar()
+        name_frame = ttk.Frame(student_info_frame)
+        name_frame.pack(fill=tk.X, pady=2)
+        name_label = ttk.Label(name_frame, text="姓名：", width=6)
+        name_label.pack(side="left")
+        self.student_name_entry = ttk.Entry(name_frame, textvariable=self.student_name_var)
+        self.student_name_entry.pack(side="left", fill=tk.X, expand=True)
+        name_hint = ttk.Label(name_frame, text="(中英文)", foreground="gray", font=("Arial", 9))
+        name_hint.pack(side="left", padx=2)
+        
+        self.student_class_var = tk.StringVar()
+        class_frame = ttk.Frame(student_info_frame)
+        class_frame.pack(fill=tk.X, pady=2)
+        class_label = ttk.Label(class_frame, text="班级：", width=6)
+        class_label.pack(side="left")
+        self.student_class_entry = ttk.Entry(class_frame, textvariable=self.student_class_var)
+        self.student_class_entry.pack(side="left", fill=tk.X, expand=True)
+        class_hint = ttk.Label(class_frame, text="(汉字/数字/括号)", foreground="gray", font=("Arial", 9))
+        class_hint.pack(side="left", padx=2)
+        
+        self.student_id_var = tk.StringVar()
+        id_frame = ttk.Frame(student_info_frame)
+        id_frame.pack(fill=tk.X, pady=2)
+        id_label = ttk.Label(id_frame, text="学号：", width=6)
+        id_label.pack(side="left")
+        self.student_id_entry = ttk.Entry(id_frame, textvariable=self.student_id_var)
+        self.student_id_entry.pack(side="left", fill=tk.X, expand=True)
+        id_hint = ttk.Label(id_frame, text="(字母/数字)", foreground="gray", font=("Arial", 9))
+        id_hint.pack(side="left", padx=2)
+        
+        self.validation_label = ttk.Label(student_info_frame, text="", foreground="red", font=("Arial", 9))
+        self.validation_label.pack(anchor="w", pady=(2, 0))
         
         grid_label_frame = ttk.LabelFrame(left_frame, text="格子类型", padding=5)
         grid_label_frame.pack(fill=tk.X, pady=(0, 0))
@@ -155,6 +191,10 @@ class CopybookGUI:
         self.input_text.bind("<KeyRelease>", self._on_input_change)
         self.root.bind("<Configure>", self._on_window_resize)
         
+        self.student_name_entry.bind("<KeyRelease>", self._on_student_info_change)
+        self.student_class_entry.bind("<KeyRelease>", self._on_student_info_change)
+        self.student_id_entry.bind("<KeyRelease>", self._on_student_info_change)
+        
     def _clean_input(self):
         """清理输入框中的特殊字符"""
         try:
@@ -181,6 +221,72 @@ class CopybookGUI:
         
     def _on_grid_type_change(self):
         """格子类型变化时的处理"""
+        self._schedule_update()
+    
+    def _on_student_info_change(self, event=None):
+        """学生信息输入变化时的处理"""
+        if event and event.keysym in ('Left', 'Right', 'Up', 'Down', 
+                                       'Shift_L', 'Shift_R', 'Control_L', 'Control_R',
+                                       'Alt_L', 'Alt_R', 'Caps_Lock', 'Tab'):
+            self._schedule_update()
+            return
+        
+        self._clean_student_info()
+        self._validate_and_update_preview()
+    
+    def _clean_student_info(self):
+        """清理学生信息输入框中的无效字符"""
+        try:
+            current_name = self.student_name_var.get()
+            cleaned_name = StudentInfoValidator.clean_name(current_name)
+            if cleaned_name != current_name:
+                self.student_name_var.set(cleaned_name)
+                self.student_name_entry.icursor(tk.END)
+        except Exception as e:
+            print(f"清理姓名时出错: {e}")
+        
+        try:
+            current_class = self.student_class_var.get()
+            cleaned_class = StudentInfoValidator.clean_class(current_class)
+            if cleaned_class != current_class:
+                self.student_class_var.set(cleaned_class)
+                self.student_class_entry.icursor(tk.END)
+        except Exception as e:
+            print(f"清理班级时出错: {e}")
+        
+        try:
+            current_id = self.student_id_var.get()
+            cleaned_id = StudentInfoValidator.clean_student_id(current_id)
+            if cleaned_id != current_id:
+                self.student_id_var.set(cleaned_id)
+                self.student_id_entry.icursor(tk.END)
+        except Exception as e:
+            print(f"清理学号时出错: {e}")
+    
+    def _validate_and_update_preview(self):
+        """验证学生信息并更新预览"""
+        name = self.student_name_var.get()
+        class_name = self.student_class_var.get()
+        student_id = self.student_id_var.get()
+        
+        valid, error_msg = StudentInfoValidator.is_valid_name(name)
+        if not valid:
+            self.validation_label.config(text=error_msg)
+            return
+        
+        valid, error_msg = StudentInfoValidator.is_valid_class(class_name)
+        if not valid:
+            self.validation_label.config(text=error_msg)
+            return
+        
+        valid, error_msg = StudentInfoValidator.is_valid_student_id(student_id)
+        if not valid:
+            self.validation_label.config(text=error_msg)
+            return
+        
+        self.validation_label.config(text="")
+        
+        self.preview.set_student_info(name, class_name, student_id)
         self._schedule_update()
     
     def _on_window_resize(self, event=None):
@@ -239,6 +345,11 @@ class CopybookGUI:
                 self.root.after(100, self._update_preview)
                 return
             
+            name = self.student_name_var.get()
+            class_name = self.student_class_var.get()
+            student_id = self.student_id_var.get()
+            self.preview.set_student_info(name, class_name, student_id)
+            
             text = self.input_text.get("1.0", tk.END)
             characters = CopybookPreview.filter_valid_characters(text)
             grid_type = self.grid_type_var.get()
@@ -288,6 +399,11 @@ class CopybookGUI:
             return
         
         try:
+            name = self.student_name_var.get()
+            class_name = self.student_class_var.get()
+            student_id = self.student_id_var.get()
+            self.preview.set_student_info(name, class_name, student_id)
+            
             page_width = int(A4[0] - 20 * mm)
             page_height = int(A4[1] - 20 * mm)
             

@@ -41,6 +41,151 @@ class GridType:
     FANGGE = "方格"
 
 
+class StudentInfoValidator:
+    """学生信息验证器 - 核心业务逻辑"""
+    
+    @staticmethod
+    def is_valid_name(name: str) -> Tuple[bool, str]:
+        """
+        验证姓名字段：只能是中英文
+        
+        Args:
+            name: 姓名字符串
+            
+        Returns:
+            Tuple[bool, str]: (是否有效, 错误信息)
+        """
+        if not name:
+            return True, ""
+        
+        for char in name:
+            if not (re.match(r'^[\u4e00-\u9fff\u3400-\u4dbf]$', char) or 
+                    re.match(r'^[a-zA-Z]$', char)):
+                return False, f"姓名只能包含中英文，无效字符：'{char}'"
+        
+        return True, ""
+    
+    @staticmethod
+    def is_valid_class(class_name: str) -> Tuple[bool, str]:
+        """
+        验证班级字段：支持汉字、数字、小括号
+        
+        Args:
+            class_name: 班级字符串
+            
+        Returns:
+            Tuple[bool, str]: (是否有效, 错误信息)
+        """
+        if not class_name:
+            return True, ""
+        
+        for char in class_name:
+            if not (re.match(r'^[\u4e00-\u9fff\u3400-\u4dbf]$', char) or 
+                    re.match(r'^[0-9]$', char) or 
+                    char in '()（）'):
+                return False, f"班级只能包含汉字、数字、小括号，无效字符：'{char}'"
+        
+        return True, ""
+    
+    @staticmethod
+    def is_valid_student_id(student_id: str) -> Tuple[bool, str]:
+        """
+        验证学号字段：支持英文字母+数字
+        
+        Args:
+            student_id: 学号字符串
+            
+        Returns:
+            Tuple[bool, str]: (是否有效, 错误信息)
+        """
+        if not student_id:
+            return True, ""
+        
+        for char in student_id:
+            if not re.match(r'^[a-zA-Z0-9]$', char):
+                return False, f"学号只能包含英文字母和数字，无效字符：'{char}'"
+        
+        return True, ""
+    
+    @staticmethod
+    def clean_name(name: str) -> str:
+        """清理姓名字段，移除非中英文字符"""
+        if not name:
+            return ""
+        cleaned = []
+        for char in name:
+            if re.match(r'^[\u4e00-\u9fff\u3400-\u4dbf]$', char) or re.match(r'^[a-zA-Z]$', char):
+                cleaned.append(char)
+        return ''.join(cleaned)
+    
+    @staticmethod
+    def clean_class(class_name: str) -> str:
+        """清理班级字段，移除非汉字、数字、小括号的字符"""
+        if not class_name:
+            return ""
+        cleaned = []
+        for char in class_name:
+            if re.match(r'^[\u4e00-\u9fff\u3400-\u4dbf]$', char) or re.match(r'^[0-9]$', char) or char in '()（）':
+                cleaned.append(char)
+        return ''.join(cleaned)
+    
+    @staticmethod
+    def clean_student_id(student_id: str) -> str:
+        """清理学号字段，移除非字母数字的字符"""
+        if not student_id:
+            return ""
+        cleaned = []
+        for char in student_id:
+            if re.match(r'^[a-zA-Z0-9]$', char):
+                cleaned.append(char)
+        return ''.join(cleaned)
+
+
+class StudentInfo:
+    """学生信息数据类 - 核心业务数据"""
+    
+    def __init__(self, name: str = "", class_name: str = "", student_id: str = ""):
+        self._name = name
+        self._class_name = class_name
+        self._student_id = student_id
+    
+    @property
+    def name(self) -> str:
+        return self._name
+    
+    @name.setter
+    def name(self, value: str):
+        self._name = value or ""
+    
+    @property
+    def class_name(self) -> str:
+        return self._class_name
+    
+    @class_name.setter
+    def class_name(self, value: str):
+        self._class_name = value or ""
+    
+    @property
+    def student_id(self) -> str:
+        return self._student_id
+    
+    @student_id.setter
+    def student_id(self, value: str):
+        self._student_id = value or ""
+    
+    def has_info(self) -> bool:
+        """检查是否有任何学生信息"""
+        return bool(self._name or self._class_name or self._student_id)
+    
+    def to_dict(self) -> Dict[str, str]:
+        """转换为字典"""
+        return {
+            "name": self._name,
+            "class_name": self._class_name,
+            "student_id": self._student_id
+        }
+
+
 class CopybookPreview:
     """字帖预览绘制器 - 核心业务逻辑"""
     
@@ -48,7 +193,93 @@ class CopybookPreview:
         self.grid_size = 60
         self.grid_padding = 5
         self.font_size = 40
+        self.student_info = StudentInfo()
         self._init_font()
+    
+    def set_student_info(self, name: str = "", class_name: str = "", student_id: str = ""):
+        """
+        设置学生信息
+        
+        Args:
+            name: 姓名
+            class_name: 班级
+            student_id: 学号
+        """
+        self.student_info.name = name
+        self.student_info.class_name = class_name
+        self.student_info.student_id = student_id
+    
+    def _draw_student_info(self, draw: ImageDraw.Draw, page_width: int, page_height: int):
+        """
+        在页面右上角绘制学生信息（姓名、班级、学号）
+        
+        Args:
+            draw: ImageDraw对象
+            page_width: 页面宽度
+            page_height: 页面高度
+        """
+        if not self.student_info.has_info():
+            return
+        
+        info_font_size = 16
+        try:
+            info_font = ImageFont.truetype(self.font_path, info_font_size) if self.font_path else None
+        except:
+            info_font = None
+        
+        if info_font is None:
+            try:
+                info_font = ImageFont.load_default()
+            except:
+                info_font = None
+        
+        if info_font is None:
+            return
+        
+        label_color = (80, 80, 80)
+        value_color = (40, 40, 40)
+        underline_color = (100, 100, 100)
+        
+        margin = 15
+        line_height = info_font_size + 8
+        label_width = 50
+        
+        info_items = []
+        if self.student_info.name:
+            info_items.append(("姓名", self.student_info.name))
+        if self.student_info.class_name:
+            info_items.append(("班级", self.student_info.class_name))
+        if self.student_info.student_id:
+            info_items.append(("学号", self.student_info.student_id))
+        
+        total_height = len(info_items) * line_height
+        start_y = margin
+        
+        for i, (label, value) in enumerate(info_items):
+            y = start_y + i * line_height
+            
+            label_x = page_width - margin - label_width - 100
+            if info_font:
+                try:
+                    draw.text((label_x, y), f"{label}：", font=info_font, fill=label_color)
+                except:
+                    pass
+            
+            value_start_x = label_x + label_width
+            value_width = 100
+            
+            if value:
+                try:
+                    draw.text((value_start_x, y), value, font=info_font, fill=value_color)
+                except:
+                    pass
+            
+            try:
+                bbox = draw.textbbox((value_start_x, y), value or "          ", font=info_font) if info_font else (value_start_x, y, value_start_x + value_width, y + info_font_size)
+                underline_y = y + line_height - 3
+                draw.line([(value_start_x, underline_y), (value_start_x + value_width, underline_y)], fill=underline_color, width=1)
+            except:
+                pass
         
     def _init_font(self):
         """初始化字体"""
@@ -194,6 +425,8 @@ class CopybookPreview:
                     self.draw_grid(draw, x, y, grid_type, "", False)
             
             char_index += 1
+        
+        self._draw_student_info(draw, page_width, page_height)
         
         return img, char_index
     
