@@ -68,6 +68,24 @@ class CopybookGUI:
                                 foreground="gray", font=("Arial", 10), justify="left")
         input_hint.pack(anchor="w", pady=(0, 10))
         
+        grid_label_frame = ttk.LabelFrame(left_frame, text="格子类型", padding=5)
+        grid_label_frame.pack(fill=tk.X, pady=(0, 10))
+        
+        self.grid_type_var = tk.StringVar(value=GridType.TIANZI)
+        
+        grid_types = [
+            (GridType.TIANZI, "田字格"),
+            (GridType.MIZI, "米字格"),
+            (GridType.HUIGONG, "回宫格"),
+            (GridType.FANGGE, "方格"),
+        ]
+        
+        for value, text in grid_types:
+            rb = ttk.Radiobutton(grid_label_frame, text=text, value=value, 
+                                  variable=self.grid_type_var,
+                                  command=self._on_grid_type_change)
+            rb.pack(anchor="w", pady=2)
+        
         student_info_frame = ttk.LabelFrame(left_frame, text="学员信息", padding=5)
         student_info_frame.pack(fill=tk.X, pady=(0, 10))
         
@@ -103,24 +121,6 @@ class CopybookGUI:
         
         self.validation_label = ttk.Label(student_info_frame, text="", foreground="red", font=("Arial", 9))
         self.validation_label.pack(anchor="w", pady=(2, 0))
-        
-        grid_label_frame = ttk.LabelFrame(left_frame, text="格子类型", padding=5)
-        grid_label_frame.pack(fill=tk.X, pady=(0, 0))
-        
-        self.grid_type_var = tk.StringVar(value=GridType.TIANZI)
-        
-        grid_types = [
-            (GridType.TIANZI, "田字格"),
-            (GridType.MIZI, "米字格"),
-            (GridType.HUIGONG, "回宫格"),
-            (GridType.FANGGE, "方格"),
-        ]
-        
-        for value, text in grid_types:
-            rb = ttk.Radiobutton(grid_label_frame, text=text, value=value, 
-                                  variable=self.grid_type_var,
-                                  command=self._on_grid_type_change)
-            rb.pack(anchor="w", pady=2)
         
         export_label_frame = ttk.LabelFrame(left_frame, text="导出", padding=5)
         export_label_frame.pack(fill=tk.X, pady=(10, 0))
