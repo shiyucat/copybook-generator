@@ -366,29 +366,49 @@ class CopybookPreview:
         spacing = 30
         total_items_width += spacing * (len(info_items) - 1)
         
+        available_width = page_width - 2 * margin
+        if total_items_width > available_width:
+            scale_factor = available_width / total_items_width
+            for i in range(len(item_widths)):
+                label_width, value_width, item_total_width = item_widths[i]
+                item_widths[i] = (
+                    int(label_width * scale_factor),
+                    int(value_width * scale_factor),
+                    int(item_total_width * scale_factor)
+                )
+            total_items_width = available_width
+            spacing = int(spacing * scale_factor)
+        
         start_x = page_width - margin - total_items_width
+        start_x = max(start_x, margin)
         
         for i, ((label, value), (label_width, value_width, item_total_width)) in enumerate(zip(info_items, item_widths)):
             label_text = f"{label}："
             label_x = start_x
             value_start_x = label_x + label_width + 10
             
+            if label_x + item_total_width > page_width - margin:
+                value_width = page_width - margin - value_start_x - 20
+                if value_width < 20:
+                    continue
+            
             try:
                 draw.text((label_x, start_y), label_text, font=info_font, fill=label_color)
             except Exception as e:
                 print(f"绘制标签失败: {e}")
             
-            if value:
+            if value and value_width > 20:
                 try:
                     draw.text((value_start_x, start_y), value, font=info_font, fill=value_color)
                 except Exception as e:
                     print(f"绘制值失败: {e}")
             
-            try:
-                underline_y = start_y + line_height - 2
-                draw.line([(value_start_x, underline_y), (value_start_x + value_width + 20, underline_y)], fill=underline_color, width=1)
-            except Exception as e:
-                print(f"绘制下划线失败: {e}")
+            if value_width > 20:
+                try:
+                    underline_y = start_y + line_height - 2
+                    draw.line([(value_start_x, underline_y), (value_start_x + value_width + 20, underline_y)], fill=underline_color, width=1)
+                except Exception as e:
+                    print(f"绘制下划线失败: {e}")
             
             start_x += item_total_width + spacing
         
