@@ -41,6 +41,66 @@ class GridType:
     FANGGE = "方格"
 
 
+class PaperSize:
+    """纸张大小 - 单位：毫米 (mm)"""
+    A4 = (210, 297)
+    SIZE_16K = (185, 260)
+    B5 = (176, 250)
+    A5 = (148, 210)
+    A6 = (105, 148)
+    
+    @classmethod
+    def get_size_by_name(cls, name: str) -> Tuple[float, float]:
+        """根据名称获取纸张大小"""
+        size_map = {
+            "A4": cls.A4,
+            "16开": cls.SIZE_16K,
+            "B5": cls.B5,
+            "A5": cls.A5,
+            "A6": cls.A6
+        }
+        return size_map.get(name, cls.A4)
+    
+    @classmethod
+    def get_display_name(cls, name: str) -> str:
+        """获取显示名称"""
+        display_map = {
+            "A4": "A4 (210×297mm)",
+            "16开": "16开 (185×260mm)",
+            "B5": "B5 (176×250mm)",
+            "A5": "A5 (148×210mm)",
+            "A6": "A6 (105×148mm)"
+        }
+        return display_map.get(name, name)
+
+
+class GridSize:
+    """格子大小 - 单位：厘米 (cm)"""
+    SIZE_1_5 = 1.5
+    SIZE_1_8 = 1.8
+    SIZE_2_0 = 2.0
+    
+    @classmethod
+    def get_size_by_name(cls, name: str) -> float:
+        """根据名称获取格子大小（厘米）"""
+        size_map = {
+            "1.5cm": cls.SIZE_1_5,
+            "1.8cm": cls.SIZE_1_8,
+            "2.0cm": cls.SIZE_2_0
+        }
+        return size_map.get(name, cls.SIZE_1_8)
+    
+    @classmethod
+    def to_mm(cls, size_cm: float) -> float:
+        """厘米转换为毫米"""
+        return size_cm * 10
+    
+    @classmethod
+    def to_points(cls, size_cm: float) -> float:
+        """厘米转换为PDF点（1英寸=72点，1英寸=2.54厘米）"""
+        return size_cm * 72 / 2.54
+
+
 class StudentInfoValidator:
     """学生信息验证器 - 核心业务逻辑"""
     
@@ -190,11 +250,42 @@ class CopybookPreview:
     """字帖预览绘制器 - 核心业务逻辑"""
     
     def __init__(self):
-        self.grid_size = 60
-        self.grid_padding = 5
-        self.font_size = 40
+        self.grid_size_cm = GridSize.SIZE_1_8
+        self.grid_size = self._cm_to_pixels(GridSize.SIZE_1_8)
+        self.grid_padding = self._cm_to_pixels(0.15)
+        self.font_size = int(self.grid_size * 0.66)
         self.student_info = StudentInfo()
         self._init_font()
+    
+    def _cm_to_pixels(self, cm: float, dpi: int = 96) -> int:
+        """
+        将厘米转换为像素
+        
+        Args:
+            cm: 厘米值
+            dpi: 每英寸点数，默认96 DPI
+            
+        Returns:
+            像素值（整数）
+        """
+        return int(cm * dpi / 2.54)
+    
+    def _update_font(self):
+        """根据当前格子大小更新字体"""
+        self.font_size = int(self.grid_size * 0.66)
+        self._init_font()
+    
+    def set_grid_size(self, size_cm: float):
+        """
+        设置格子大小（厘米）
+        
+        Args:
+            size_cm: 格子边长，单位：厘米
+        """
+        self.grid_size_cm = size_cm
+        self.grid_size = self._cm_to_pixels(size_cm)
+        self.grid_padding = self._cm_to_pixels(0.15)
+        self._update_font()
     
     def set_student_info(self, name: str = "", class_name: str = "", student_id: str = ""):
         """

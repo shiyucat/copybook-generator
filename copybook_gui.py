@@ -23,7 +23,7 @@ try:
 except ImportError:
     REPORTLAB_AVAILABLE = False
 
-from copybook_generator import GridType, CopybookPreview, StudentInfoValidator
+from copybook_generator import GridType, CopybookPreview, StudentInfoValidator, PaperSize, GridSize
 
 
 class CopybookGUI:
@@ -41,6 +41,9 @@ class CopybookGUI:
         
         self.current_page = 1
         self.total_pages = 1
+        
+        self.paper_size_var = tk.StringVar(value="A4")
+        self.grid_size_var = tk.StringVar(value="1.8cm")
         
         self._create_ui()
         self._bind_events()
@@ -66,6 +69,30 @@ class CopybookGUI:
         input_hint = ttk.Label(left_frame, text="支持：中文、英文、数字\n空格和换行不占格\n不支持：标点符号、特殊字符", 
                                 foreground="gray", font=("Arial", 10), justify="left")
         input_hint.pack(anchor="w", pady=(0, 10))
+        
+        paper_size_frame = ttk.LabelFrame(left_frame, text="纸张选择", padding=5)
+        paper_size_frame.pack(fill=tk.X, pady=(0, 10))
+        
+        paper_size_options = ["A4", "16开", "B5", "A5", "A6"]
+        self.paper_size_combobox = ttk.Combobox(paper_size_frame, textvariable=self.paper_size_var, 
+                                                  values=paper_size_options, state="readonly", width=20)
+        self.paper_size_combobox.pack(fill=tk.X, pady=5)
+        self.paper_size_combobox.bind("<<ComboboxSelected>>", self._on_paper_size_change)
+        
+        grid_size_frame = ttk.LabelFrame(left_frame, text="格子大小", padding=5)
+        grid_size_frame.pack(fill=tk.X, pady=(0, 10))
+        
+        grid_size_options = [
+            ("1.5cm", "1.5 厘米"),
+            ("1.8cm", "1.8 厘米"),
+            ("2.0cm", "2.0 厘米"),
+        ]
+        
+        for value, text in grid_size_options:
+            rb = ttk.Radiobutton(grid_size_frame, text=text, value=value, 
+                                  variable=self.grid_size_var,
+                                  command=self._on_grid_size_change)
+            rb.pack(anchor="w", pady=2)
         
         grid_label_frame = ttk.LabelFrame(left_frame, text="格子类型", padding=5)
         grid_label_frame.pack(fill=tk.X, pady=(0, 10))
@@ -219,6 +246,19 @@ class CopybookGUI:
         """格子类型变化时的处理"""
         self._schedule_update()
     
+    def _on_paper_size_change(self, event=None):
+        """纸张大小变化时的处理"""
+        self.current_page = 1
+        self._schedule_update()
+    
+    def _on_grid_size_change(self):
+        """格子大小变化时的处理"""
+        grid_size_name = self.grid_size_var.get()
+        grid_size_cm = GridSize.get_size_by_name(grid_size_name)
+        self.preview.set_grid_size(grid_size_cm)
+        self.current_page = 1
+        self._schedule_update()
+    
     def _on_student_info_change(self, event=None):
         """学生信息输入变化时的处理"""
         if event and event.keysym in ('Left', 'Right', 'Up', 'Down', 
@@ -325,6 +365,35 @@ class CopybookGUI:
         """调度初始更新"""
         self.root.after(100, self._update_preview)
         
+    def _calculate_page_size(self, canvas_width: int, canvas_height: int) -> Tuple[int, int, float, float]:
+        """
+        根据画布尺寸和选择的纸张大小，计算预览页面的实际尺寸
+        
+        Args:
+            canvas_width: 画布宽度
+            canvas_height: 画布高度
+            
+        Returns:
+            (页面宽度, 页面高度, 水平偏移, 垂直偏移)
+        """
+        paper_size_name = self.paper_size_var.get()
+        paper_width_mm, paper_height_mm = PaperSize.get_size_by_name(paper_size_name)
+        
+        paper_aspect_ratio = paper_width_mm / paper_height_mm
+        canvas_aspect_ratio = canvas_width / canvas_height
+        
+        if paper_aspect_ratio > canvas_aspect_ratio:
+            page_width = canvas_width - 20
+            page_height = int(page_width / paper_aspect_ratio)
+        else:
+            page_height = canvas_height - 20
+            page_width = int(page_height * paper_aspect_ratio)
+        
+        offset_x = (canvas_width - page_width) / 2
+        offset_y = (canvas_height - page_height) / 2
+        
+        return page_width, page_height, offset_x, offset_y
+    
     def _update_preview(self):
         """更新预览"""
         try:
@@ -340,23 +409,32 @@ class CopybookGUI:
             student_id = self.student_id_var.get()
             self.preview.set_student_info(name, class_name, student_id)
             
+            grid_size_name = self.grid_size_var.get()
+            grid_size_cm = GridSize.get_size_by_name(grid_size_name)
+            self.preview.set_grid_size(grid_size_cm)
+            
+            page_width, page_height, offset_x, offset_y = self._calculate_page_size(canvas_width, canvas_height)
+            
             text = self.input_text.get("1.0", tk.END)
             characters = CopybookPreview.filter_valid_characters(text)
             grid_type = self.grid_type_var.get()
             
-            self.total_pages = self.preview.calculate_total_pages(characters, canvas_width, canvas_height)
+            self.total_pages = self.preview.calculate_total_pages(characters, page_width, page_height)
             
             if self.current_page > self.total_pages:
                 self.current_page = self.total_pages
             
             self._update_navigation_buttons()
             
-            img = self.preview.generate_preview_page(characters, self.current_page, grid_type, canvas_width, canvas_height)
+            img = self.preview.generate_preview_page(characters, self.current_page, grid_type, page_width, page_height)
             
             if img:
-                self.preview_image = ImageTk.PhotoImage(img)
                 self.preview_canvas.delete("all")
-                self.preview_canvas.create_image(0, 0, anchor=tk.NW, image=self.preview_image)
+                
+                self.preview_canvas.configure(bg="#f0f0f0")
+                
+                self.preview_image = ImageTk.PhotoImage(img)
+                self.preview_canvas.create_image(offset_x, offset_y, anchor=tk.NW, image=self.preview_image)
             
         except Exception as e:
             print(f"更新预览时出错: {e}")
@@ -394,16 +472,28 @@ class CopybookGUI:
             student_id = self.student_id_var.get()
             self.preview.set_student_info(name, class_name, student_id)
             
-            page_width = int(A4[0] - 20 * mm)
-            page_height = int(A4[1] - 20 * mm)
+            grid_size_name = self.grid_size_var.get()
+            grid_size_cm = GridSize.get_size_by_name(grid_size_name)
+            self.preview.set_grid_size(grid_size_cm)
+            
+            paper_size_name = self.paper_size_var.get()
+            paper_width_mm, paper_height_mm = PaperSize.get_size_by_name(paper_size_name)
+            
+            paper_width_points = paper_width_mm * mm
+            paper_height_points = paper_height_mm * mm
+            custom_page_size = (paper_width_points, paper_height_points)
+            
+            margin = 10 * mm
+            content_width = int(paper_width_points - 2 * margin)
+            content_height = int(paper_height_points - 2 * margin)
             
             grid_type = self.grid_type_var.get()
-            pages = self.preview.generate_all_pages(characters, grid_type, page_width, page_height)
+            pages = self.preview.generate_all_pages(characters, grid_type, content_width, content_height)
             
-            c = canvas.Canvas(save_path, pagesize=A4)
+            c = canvas.Canvas(save_path, pagesize=custom_page_size)
             
-            margin_x = 10 * mm
-            margin_y = 10 * mm
+            margin_x = margin
+            margin_y = margin
             
             temp_files = []
             try:
