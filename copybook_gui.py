@@ -74,25 +74,21 @@ class CopybookGUI:
         paper_size_frame.pack(fill=tk.X, pady=(0, 10))
         
         paper_size_options = ["A4", "16开", "B5", "A5", "A6"]
+        self.paper_size_var.set("A4")
         self.paper_size_combobox = ttk.Combobox(paper_size_frame, textvariable=self.paper_size_var, 
                                                   values=paper_size_options, state="readonly", width=20)
+        self.paper_size_combobox.current(0)
         self.paper_size_combobox.pack(fill=tk.X, pady=5)
-        self.paper_size_combobox.bind("<<ComboboxSelected>>", self._on_paper_size_change)
         
         grid_size_frame = ttk.LabelFrame(left_frame, text="格子大小", padding=5)
         grid_size_frame.pack(fill=tk.X, pady=(0, 10))
         
-        grid_size_options = [
-            ("1.5cm", "1.5 厘米"),
-            ("1.8cm", "1.8 厘米"),
-            ("2.0cm", "2.0 厘米"),
-        ]
-        
-        for value, text in grid_size_options:
-            rb = ttk.Radiobutton(grid_size_frame, text=text, value=value, 
-                                  variable=self.grid_size_var,
-                                  command=self._on_grid_size_change)
-            rb.pack(anchor="w", pady=2)
+        grid_size_options = ["1.5cm", "1.8cm", "2.0cm"]
+        self.grid_size_var.set("1.8cm")
+        self.grid_size_combobox = ttk.Combobox(grid_size_frame, textvariable=self.grid_size_var, 
+                                                  values=grid_size_options, state="readonly", width=20)
+        self.grid_size_combobox.current(1)
+        self.grid_size_combobox.pack(fill=tk.X, pady=5)
         
         grid_label_frame = ttk.LabelFrame(left_frame, text="格子类型", padding=5)
         grid_label_frame.pack(fill=tk.X, pady=(0, 10))
@@ -218,6 +214,9 @@ class CopybookGUI:
         self.student_class_entry.bind("<KeyRelease>", self._on_student_info_change)
         self.student_id_entry.bind("<KeyRelease>", self._on_student_info_change)
         
+        self.paper_size_combobox.bind("<<ComboboxSelected>>", self._on_paper_size_change)
+        self.grid_size_combobox.bind("<<ComboboxSelected>>", self._on_grid_size_change)
+        
     def _clean_input(self):
         """清理输入框中的特殊字符"""
         try:
@@ -251,7 +250,7 @@ class CopybookGUI:
         self.current_page = 1
         self._schedule_update()
     
-    def _on_grid_size_change(self):
+    def _on_grid_size_change(self, event=None):
         """格子大小变化时的处理"""
         grid_size_name = self.grid_size_var.get()
         grid_size_cm = GridSize.get_size_by_name(grid_size_name)
