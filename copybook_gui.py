@@ -49,9 +49,7 @@ class CopybookGUI:
     def _create_ui(self):
         """创建UI界面"""
         self.root.columnconfigure(0, weight=2)
-        self.root.columnconfigure(1, weight=1)
-        self.root.columnconfigure(2, weight=7)
-        self.root.columnconfigure(3, weight=0)
+        self.root.columnconfigure(1, weight=8)
         self.root.rowconfigure(0, weight=1)
         
         left_frame = ttk.Frame(self.root)
@@ -135,11 +133,8 @@ class CopybookGUI:
                                      foreground="red", font=("Arial", 9), justify="center")
             hint_label.pack(pady=2)
         
-        spacer_frame = ttk.Frame(self.root)
-        spacer_frame.grid(row=0, column=1, sticky="nsew")
-        
         preview_frame = ttk.Frame(self.root, relief=tk.SOLID, borderwidth=1)
-        preview_frame.grid(row=0, column=2, sticky="nsew", padx=(0, 0), pady=10)
+        preview_frame.grid(row=0, column=1, sticky="nsew", padx=(10, 10), pady=10)
         preview_frame.rowconfigure(0, weight=0)
         preview_frame.rowconfigure(1, weight=1)
         preview_frame.rowconfigure(2, weight=0)
@@ -180,9 +175,6 @@ class CopybookGUI:
         
         self.go_button = ttk.Button(navigation_frame, text="跳转", command=self._go_to_page)
         self.go_button.pack(side="left")
-        
-        right_spacer_frame = ttk.Frame(self.root)
-        right_spacer_frame.grid(row=0, column=3, sticky="nsew")
         
         self._update_navigation_buttons()
         
