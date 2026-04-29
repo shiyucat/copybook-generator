@@ -82,7 +82,7 @@ class CopybookGUI(QMainWindow):
         input_layout = QVBoxLayout(input_group)
         
         self.input_text = QTextEdit()
-        self.input_text.setWrapMode(QTextEdit.WidgetWidth)
+        self.input_text.setLineWrapMode(QTextEdit.WidgetWidth)
         font = QFont("Arial", 14)
         self.input_text.setFont(font)
         self.input_text.setMinimumHeight(200)
