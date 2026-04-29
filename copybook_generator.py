@@ -211,16 +211,13 @@ class CopybookPreview:
     
     def _draw_student_info(self, draw: ImageDraw.Draw, page_width: int, page_height: int):
         """
-        在页面右上角绘制学生信息（姓名、班级、学号）
+        在页面上方绘制学生信息（姓名、班级、学号）- 一行平铺显示
         
         Args:
             draw: ImageDraw对象
             page_width: 页面宽度
             page_height: 页面高度
         """
-        if not self.student_info.has_info():
-            return
-        
         info_font_size = 16
         info_font = None
         
@@ -246,19 +243,18 @@ class CopybookPreview:
         margin = 20
         line_height = info_font_size + 10
         
-        info_items = []
-        if self.student_info.name:
-            info_items.append(("姓名", self.student_info.name))
-        if self.student_info.class_name:
-            info_items.append(("班级", self.student_info.class_name))
-        if self.student_info.student_id:
-            info_items.append(("学号", self.student_info.student_id))
+        info_items = [
+            ("姓名", self.student_info.name),
+            ("班级", self.student_info.class_name),
+            ("学号", self.student_info.student_id)
+        ]
         
         start_y = margin
         
-        for i, (label, value) in enumerate(info_items):
-            y = start_y + i * line_height
-            
+        total_items_width = 0
+        item_widths = []
+        
+        for label, value in info_items:
             label_text = f"{label}："
             try:
                 bbox = draw.textbbox((0, 0), label_text, font=info_font)
@@ -272,26 +268,38 @@ class CopybookPreview:
             except:
                 value_width = 80
             
-            total_width = label_width + value_width + 10
-            label_x = page_width - margin - total_width
+            item_total_width = label_width + value_width + 10
+            item_widths.append((label_width, value_width, item_total_width))
+            total_items_width += item_total_width
+        
+        spacing = 30
+        total_items_width += spacing * (len(info_items) - 1)
+        
+        start_x = page_width - margin - total_items_width
+        
+        for i, ((label, value), (label_width, value_width, item_total_width)) in enumerate(zip(info_items, item_widths)):
+            label_text = f"{label}："
+            label_x = start_x
             value_start_x = label_x + label_width + 10
             
             try:
-                draw.text((label_x, y), label_text, font=info_font, fill=label_color)
+                draw.text((label_x, start_y), label_text, font=info_font, fill=label_color)
             except Exception as e:
                 print(f"绘制标签失败: {e}")
             
             if value:
                 try:
-                    draw.text((value_start_x, y), value, font=info_font, fill=value_color)
+                    draw.text((value_start_x, start_y), value, font=info_font, fill=value_color)
                 except Exception as e:
                     print(f"绘制值失败: {e}")
             
             try:
-                underline_y = y + line_height - 2
+                underline_y = start_y + line_height - 2
                 draw.line([(value_start_x, underline_y), (value_start_x + value_width + 20, underline_y)], fill=underline_color, width=1)
             except Exception as e:
                 print(f"绘制下划线失败: {e}")
+            
+            start_x += item_total_width + spacing
         
     def _init_font(self):
         """初始化字体"""
@@ -385,30 +393,16 @@ class CopybookPreview:
     
     def _get_student_info_height(self) -> int:
         """
-        计算学生信息区域所需的高度
+        计算学生信息区域所需的高度（始终显示，一行平铺）
         
         Returns:
             学生信息区域的高度（像素）
         """
-        if not self.student_info.has_info():
-            return 0
-        
-        info_items = 0
-        if self.student_info.name:
-            info_items += 1
-        if self.student_info.class_name:
-            info_items += 1
-        if self.student_info.student_id:
-            info_items += 1
-        
-        if info_items == 0:
-            return 0
-        
         info_font_size = 16
         line_height = info_font_size + 10
         margin = 20
         
-        return margin * 2 + info_items * line_height
+        return margin * 2 + line_height
     
     def _calculate_layout(self, page_width: int, page_height: int):
         """计算排版参数"""

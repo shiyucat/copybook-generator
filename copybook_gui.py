@@ -50,8 +50,8 @@ class CopybookGUI:
         """创建UI界面"""
         self.root.columnconfigure(0, weight=2)
         self.root.columnconfigure(1, weight=1)
-        self.root.columnconfigure(2, weight=6)
-        self.root.columnconfigure(3, weight=1)
+        self.root.columnconfigure(2, weight=7)
+        self.root.columnconfigure(3, weight=0)
         self.root.rowconfigure(0, weight=1)
         
         left_frame = ttk.Frame(self.root)
