@@ -37,13 +37,16 @@ class CopybookGUI:
         
         self.preview = CopybookPreview()
         self.debounce_job = None
-        self.debounce_delay = 200
+        self.debounce_delay = 300
         
         self.current_page = 1
         self.total_pages = 1
         
         self.paper_size_var = tk.StringVar(value="A4")
         self.grid_size_var = tk.StringVar(value="1.8cm")
+        
+        self._last_canvas_width = 0
+        self._last_canvas_height = 0
         
         self._create_ui()
         self._bind_events()
@@ -181,7 +184,7 @@ class CopybookGUI:
         canvas_frame.rowconfigure(0, weight=1)
         canvas_frame.columnconfigure(0, weight=1)
         
-        self.preview_canvas = tk.Canvas(canvas_frame, bg="white", highlightthickness=0)
+        self.preview_canvas = tk.Canvas(canvas_frame, bg="#f0f0f0", highlightthickness=0)
         self.preview_canvas.grid(row=0, column=0, sticky="nsew")
         
         navigation_frame = ttk.Frame(preview_frame)
@@ -321,7 +324,13 @@ class CopybookGUI:
     def _on_window_resize(self, event=None):
         """窗口大小变化时的处理"""
         if event and event.widget == self.root:
-            self._schedule_update()
+            canvas_width = self.preview_canvas.winfo_width()
+            canvas_height = self.preview_canvas.winfo_height()
+            
+            if canvas_width != self._last_canvas_width or canvas_height != self._last_canvas_height:
+                self._last_canvas_width = canvas_width
+                self._last_canvas_height = canvas_height
+                self._schedule_update()
     
     def _prev_page(self):
         """上一页"""
@@ -429,9 +438,6 @@ class CopybookGUI:
             
             if img:
                 self.preview_canvas.delete("all")
-                
-                self.preview_canvas.configure(bg="#f0f0f0")
-                
                 self.preview_image = ImageTk.PhotoImage(img)
                 self.preview_canvas.create_image(offset_x, offset_y, anchor=tk.NW, image=self.preview_image)
             
