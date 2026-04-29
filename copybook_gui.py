@@ -4,6 +4,7 @@
 """
 字帖生成器 GUI 版本
 生成田字格、米字格、回宫格、方格格式的字帖
+使用 PyQt5 替代 tkinter
 """
 
 import sys
@@ -11,9 +12,14 @@ import os
 from datetime import datetime
 from typing import List, Tuple, Optional
 
-import tkinter as tk
-from tkinter import ttk, messagebox, filedialog
-from PIL import ImageTk
+from PyQt5.QtWidgets import (
+    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
+    QLabel, QTextEdit, QComboBox, QRadioButton, QButtonGroup,
+    QLineEdit, QPushButton, QGroupBox, QFrame, QSplitter,
+    QMessageBox, QFileDialog, QSpinBox
+)
+from PyQt5.QtCore import Qt, QTimer, QSize, pyqtSignal
+from PyQt5.QtGui import QFont, QPalette, QColor, QImage, QPixmap
 
 try:
     from reportlab.lib.pagesizes import A4
@@ -26,24 +32,27 @@ except ImportError:
 from copybook_generator import GridType, CopybookPreview, StudentInfoValidator, PaperSize, GridSize
 
 
-class CopybookGUI:
+class CopybookGUI(QMainWindow):
     """字帖生成器 GUI 主类 - 负责界面交互"""
     
-    def __init__(self, root: tk.Tk):
-        self.root = root
-        self.root.title("字帖生成器")
-        self.root.geometry("1200x800")
-        self.root.minsize(900, 600)
+    def __init__(self):
+        super().__init__()
+        
+        self.setWindowTitle("字帖生成器")
+        self.setMinimumSize(900, 600)
+        self.resize(1200, 800)
         
         self.preview = CopybookPreview()
-        self.debounce_job = None
+        self.debounce_timer = QTimer()
+        self.debounce_timer.setSingleShot(True)
+        self.debounce_timer.timeout.connect(self._update_preview)
         self.debounce_delay = 300
         
         self.current_page = 1
         self.total_pages = 1
         
-        self.paper_size_var = tk.StringVar(value="A4")
-        self.grid_size_var = tk.StringVar(value="1.8cm")
+        self.paper_size_var = "A4"
+        self.grid_size_var = "1.8cm"
         
         self._last_canvas_width = 0
         self._last_canvas_height = 0
@@ -54,49 +63,63 @@ class CopybookGUI:
         
     def _create_ui(self):
         """创建UI界面"""
-        self.root.columnconfigure(0, weight=2, uniform="main")
-        self.root.columnconfigure(1, weight=1, uniform="main")
-        self.root.columnconfigure(2, weight=7, uniform="main")
-        self.root.rowconfigure(0, weight=1)
+        central_widget = QWidget()
+        self.setCentralWidget(central_widget)
         
-        left_frame = ttk.Frame(self.root)
-        left_frame.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
+        main_layout = QHBoxLayout(central_widget)
+        main_layout.setContentsMargins(10, 10, 10, 10)
+        main_layout.setSpacing(10)
         
-        input_label = ttk.Label(left_frame, text="输入文字", font=("Arial", 12, "bold"))
-        input_label.pack(anchor="w", pady=(0, 5))
+        splitter = QSplitter(Qt.Horizontal)
+        main_layout.addWidget(splitter)
         
-        self.input_text = tk.Text(left_frame, wrap=tk.WORD, font=("Arial", 14), 
-                                   relief=tk.SOLID, borderwidth=1, height=10)
-        self.input_text.pack(fill=tk.X, pady=(0, 10))
+        left_panel = QWidget()
+        left_layout = QVBoxLayout(left_panel)
+        left_layout.setContentsMargins(0, 0, 0, 0)
+        left_layout.setSpacing(10)
         
-        input_hint = ttk.Label(left_frame, text="支持：中文、英文、数字\n空格和换行不占格\n不支持：标点符号、特殊字符", 
-                                foreground="gray", font=("Arial", 10), justify="left")
-        input_hint.pack(anchor="w", pady=(0, 10))
+        input_group = QGroupBox("输入文字")
+        input_layout = QVBoxLayout(input_group)
         
-        paper_size_frame = ttk.LabelFrame(left_frame, text="纸张选择", padding=5)
-        paper_size_frame.pack(fill=tk.X, pady=(0, 10))
+        self.input_text = QTextEdit()
+        self.input_text.setWrapMode(QTextEdit.WidgetWidth)
+        font = QFont("Arial", 14)
+        self.input_text.setFont(font)
+        self.input_text.setMinimumHeight(200)
+        input_layout.addWidget(self.input_text)
+        
+        input_hint = QLabel("支持：中文、英文、数字\n空格和换行不占格\n不支持：标点符号、特殊字符")
+        input_hint.setStyleSheet("color: gray; font-size: 10px;")
+        input_layout.addWidget(input_hint)
+        
+        left_layout.addWidget(input_group)
+        
+        paper_size_group = QGroupBox("纸张选择")
+        paper_size_layout = QVBoxLayout(paper_size_group)
         
         paper_size_options = ["A4", "16开", "B5", "A5", "A6"]
-        self.paper_size_var.set("A4")
-        self.paper_size_combobox = ttk.Combobox(paper_size_frame, textvariable=self.paper_size_var, 
-                                                  values=paper_size_options, state="readonly", width=20)
-        self.paper_size_combobox.current(0)
-        self.paper_size_combobox.pack(fill=tk.X, pady=5)
+        self.paper_size_combobox = QComboBox()
+        self.paper_size_combobox.addItems(paper_size_options)
+        self.paper_size_combobox.setCurrentText("A4")
+        paper_size_layout.addWidget(self.paper_size_combobox)
         
-        grid_size_frame = ttk.LabelFrame(left_frame, text="格子大小", padding=5)
-        grid_size_frame.pack(fill=tk.X, pady=(0, 10))
+        left_layout.addWidget(paper_size_group)
+        
+        grid_size_group = QGroupBox("格子大小")
+        grid_size_layout = QVBoxLayout(grid_size_group)
         
         grid_size_options = ["1.5cm", "1.8cm", "2.0cm"]
-        self.grid_size_var.set("1.8cm")
-        self.grid_size_combobox = ttk.Combobox(grid_size_frame, textvariable=self.grid_size_var, 
-                                                  values=grid_size_options, state="readonly", width=20)
-        self.grid_size_combobox.current(1)
-        self.grid_size_combobox.pack(fill=tk.X, pady=5)
+        self.grid_size_combobox = QComboBox()
+        self.grid_size_combobox.addItems(grid_size_options)
+        self.grid_size_combobox.setCurrentText("1.8cm")
+        grid_size_layout.addWidget(self.grid_size_combobox)
         
-        grid_label_frame = ttk.LabelFrame(left_frame, text="格子类型", padding=5)
-        grid_label_frame.pack(fill=tk.X, pady=(0, 10))
+        left_layout.addWidget(grid_size_group)
         
-        self.grid_type_var = tk.StringVar(value=GridType.TIANZI)
+        grid_type_group = QGroupBox("格子类型")
+        grid_type_layout = QVBoxLayout(grid_type_group)
+        
+        self.grid_type_group = QButtonGroup()
         
         grid_types = [
             (GridType.TIANZI, "田字格"),
@@ -105,141 +128,187 @@ class CopybookGUI:
             (GridType.FANGGE, "方格"),
         ]
         
-        for value, text in grid_types:
-            rb = ttk.Radiobutton(grid_label_frame, text=text, value=value, 
-                                  variable=self.grid_type_var,
-                                  command=self._on_grid_type_change)
-            rb.pack(anchor="w", pady=2)
+        for i, (value, text) in enumerate(grid_types):
+            rb = QRadioButton(text)
+            self.grid_type_group.addButton(rb, i)
+            rb.setProperty("grid_type", value)
+            if value == GridType.TIANZI:
+                rb.setChecked(True)
+            grid_type_layout.addWidget(rb)
         
-        student_info_frame = ttk.LabelFrame(left_frame, text="学员信息", padding=5)
-        student_info_frame.pack(fill=tk.X, pady=(0, 10))
+        left_layout.addWidget(grid_type_group)
         
-        self.student_name_var = tk.StringVar()
-        name_frame = ttk.Frame(student_info_frame)
-        name_frame.pack(fill=tk.X, pady=2)
-        name_label = ttk.Label(name_frame, text="姓名：", width=6)
-        name_label.pack(side="left")
-        self.student_name_entry = ttk.Entry(name_frame, textvariable=self.student_name_var)
-        self.student_name_entry.pack(side="left", fill=tk.X, expand=True)
-        name_hint = ttk.Label(name_frame, text="(中英文)", foreground="gray", font=("Arial", 9))
-        name_hint.pack(side="left", padx=2)
+        student_info_group = QGroupBox("学员信息")
+        student_info_layout = QVBoxLayout(student_info_group)
         
-        self.student_class_var = tk.StringVar()
-        class_frame = ttk.Frame(student_info_frame)
-        class_frame.pack(fill=tk.X, pady=2)
-        class_label = ttk.Label(class_frame, text="班级：", width=6)
-        class_label.pack(side="left")
-        self.student_class_entry = ttk.Entry(class_frame, textvariable=self.student_class_var)
-        self.student_class_entry.pack(side="left", fill=tk.X, expand=True)
-        class_hint = ttk.Label(class_frame, text="(汉字/数字/括号)", foreground="gray", font=("Arial", 9))
-        class_hint.pack(side="left", padx=2)
+        name_layout = QHBoxLayout()
+        name_label = QLabel("姓名：")
+        name_label.setFixedWidth(40)
+        self.student_name_entry = QLineEdit()
+        name_hint = QLabel("(中英文)")
+        name_hint.setStyleSheet("color: gray; font-size: 9px;")
+        name_layout.addWidget(name_label)
+        name_layout.addWidget(self.student_name_entry, 1)
+        name_layout.addWidget(name_hint)
+        student_info_layout.addLayout(name_layout)
         
-        self.student_id_var = tk.StringVar()
-        id_frame = ttk.Frame(student_info_frame)
-        id_frame.pack(fill=tk.X, pady=2)
-        id_label = ttk.Label(id_frame, text="学号：", width=6)
-        id_label.pack(side="left")
-        self.student_id_entry = ttk.Entry(id_frame, textvariable=self.student_id_var)
-        self.student_id_entry.pack(side="left", fill=tk.X, expand=True)
-        id_hint = ttk.Label(id_frame, text="(字母/数字)", foreground="gray", font=("Arial", 9))
-        id_hint.pack(side="left", padx=2)
+        class_layout = QHBoxLayout()
+        class_label = QLabel("班级：")
+        class_label.setFixedWidth(40)
+        self.student_class_entry = QLineEdit()
+        class_hint = QLabel("(汉字/数字/括号)")
+        class_hint.setStyleSheet("color: gray; font-size: 9px;")
+        class_layout.addWidget(class_label)
+        class_layout.addWidget(self.student_class_entry, 1)
+        class_layout.addWidget(class_hint)
+        student_info_layout.addLayout(class_layout)
         
-        self.validation_label = ttk.Label(student_info_frame, text="", foreground="red", font=("Arial", 9))
-        self.validation_label.pack(anchor="w", pady=(2, 0))
+        id_layout = QHBoxLayout()
+        id_label = QLabel("学号：")
+        id_label.setFixedWidth(40)
+        self.student_id_entry = QLineEdit()
+        id_hint = QLabel("(字母/数字)")
+        id_hint.setStyleSheet("color: gray; font-size: 9px;")
+        id_layout.addWidget(id_label)
+        id_layout.addWidget(self.student_id_entry, 1)
+        id_layout.addWidget(id_hint)
+        student_info_layout.addLayout(id_layout)
         
-        export_label_frame = ttk.LabelFrame(left_frame, text="导出", padding=5)
-        export_label_frame.pack(fill=tk.X, pady=(10, 0))
+        self.validation_label = QLabel("")
+        self.validation_label.setStyleSheet("color: red; font-size: 9px;")
+        student_info_layout.addWidget(self.validation_label)
         
-        self.export_button = ttk.Button(export_label_frame, text="导出 PDF", 
-                                          command=self._export_pdf)
-        self.export_button.pack(fill=tk.X, pady=5)
+        left_layout.addWidget(student_info_group)
+        
+        export_group = QGroupBox("导出")
+        export_layout = QVBoxLayout(export_group)
+        
+        self.export_button = QPushButton("导出 PDF")
+        export_layout.addWidget(self.export_button)
         
         if not REPORTLAB_AVAILABLE:
-            self.export_button.config(state="disabled")
-            hint_label = ttk.Label(export_label_frame, text="需要安装 reportlab 库\npip install reportlab", 
-                                     foreground="red", font=("Arial", 9), justify="center")
-            hint_label.pack(pady=2)
+            self.export_button.setEnabled(False)
+            hint_label = QLabel("需要安装 reportlab 库\npip install reportlab")
+            hint_label.setStyleSheet("color: red; font-size: 9px;")
+            hint_label.setAlignment(Qt.AlignCenter)
+            export_layout.addWidget(hint_label)
         
-        spacer_frame = ttk.Frame(self.root)
-        spacer_frame.grid(row=0, column=1, sticky="nsew")
+        left_layout.addWidget(export_group)
         
-        preview_frame = ttk.Frame(self.root, relief=tk.SOLID, borderwidth=1)
-        preview_frame.grid(row=0, column=2, sticky="nsew", padx=(0, 10), pady=10)
-        preview_frame.rowconfigure(0, weight=0)
-        preview_frame.rowconfigure(1, weight=1)
-        preview_frame.rowconfigure(2, weight=0)
-        preview_frame.columnconfigure(0, weight=1)
+        left_layout.addStretch(1)
         
-        preview_top_frame = ttk.Frame(preview_frame)
-        preview_top_frame.grid(row=0, column=0, sticky="ew", padx=5, pady=(5, 0))
+        right_panel = QWidget()
+        right_layout = QVBoxLayout(right_panel)
+        right_layout.setContentsMargins(0, 0, 0, 0)
+        right_layout.setSpacing(5)
         
-        preview_label = ttk.Label(preview_top_frame, text="预览", font=("Arial", 12, "bold"))
-        preview_label.pack(side="left")
+        preview_top_frame = QFrame()
+        preview_top_layout = QHBoxLayout(preview_top_frame)
+        preview_top_layout.setContentsMargins(5, 5, 5, 5)
         
-        self.page_label = ttk.Label(preview_top_frame, text="第 1 页 / 共 1 页", font=("Arial", 10))
-        self.page_label.pack(side="right")
+        preview_label = QLabel("预览")
+        preview_label.setStyleSheet("font-size: 12px; font-weight: bold;")
+        preview_top_layout.addWidget(preview_label)
         
-        canvas_frame = ttk.Frame(preview_frame)
-        canvas_frame.grid(row=1, column=0, sticky="nsew", padx=5, pady=5)
-        canvas_frame.rowconfigure(0, weight=1)
-        canvas_frame.columnconfigure(0, weight=1)
+        preview_top_layout.addStretch(1)
         
-        self.preview_canvas = tk.Canvas(canvas_frame, bg="#f0f0f0", highlightthickness=0)
-        self.preview_canvas.grid(row=0, column=0, sticky="nsew")
+        self.page_label = QLabel("第 1 页 / 共 1 页")
+        self.page_label.setStyleSheet("font-size: 10px;")
+        preview_top_layout.addWidget(self.page_label)
         
-        navigation_frame = ttk.Frame(preview_frame)
-        navigation_frame.grid(row=2, column=0, sticky="ew", padx=5, pady=(0, 5))
+        right_layout.addWidget(preview_top_frame)
         
-        self.prev_button = ttk.Button(navigation_frame, text="上一页", command=self._prev_page, state="disabled")
-        self.prev_button.pack(side="left", padx=(0, 10))
+        self.preview_frame = QFrame()
+        self.preview_frame.setStyleSheet("background-color: #f0f0f0; border: 1px solid #888;")
+        preview_frame_layout = QVBoxLayout(self.preview_frame)
+        preview_frame_layout.setContentsMargins(10, 10, 10, 10)
         
-        self.next_button = ttk.Button(navigation_frame, text="下一页", command=self._next_page, state="disabled")
-        self.next_button.pack(side="left")
+        self.preview_label = QLabel()
+        self.preview_label.setAlignment(Qt.AlignCenter)
+        self.preview_label.setMinimumSize(400, 500)
+        preview_frame_layout.addWidget(self.preview_label)
         
-        self.page_entry_label = ttk.Label(navigation_frame, text="跳转到页：", font=("Arial", 10))
-        self.page_entry_label.pack(side="left", padx=(20, 5))
+        right_layout.addWidget(self.preview_frame, 1)
         
-        self.page_var = tk.StringVar(value="1")
-        self.page_entry = ttk.Entry(navigation_frame, textvariable=self.page_var, width=5)
-        self.page_entry.pack(side="left", padx=(0, 5))
+        navigation_frame = QFrame()
+        navigation_layout = QHBoxLayout(navigation_frame)
+        navigation_layout.setContentsMargins(5, 5, 5, 5)
         
-        self.go_button = ttk.Button(navigation_frame, text="跳转", command=self._go_to_page)
-        self.go_button.pack(side="left")
+        self.prev_button = QPushButton("上一页")
+        self.prev_button.setEnabled(False)
+        navigation_layout.addWidget(self.prev_button)
+        
+        self.next_button = QPushButton("下一页")
+        self.next_button.setEnabled(False)
+        navigation_layout.addWidget(self.next_button)
+        
+        navigation_layout.addSpacing(20)
+        
+        page_entry_label = QLabel("跳转到页：")
+        page_entry_label.setStyleSheet("font-size: 10px;")
+        navigation_layout.addWidget(page_entry_label)
+        
+        self.page_spinbox = QSpinBox()
+        self.page_spinbox.setMinimum(1)
+        self.page_spinbox.setMaximum(1)
+        self.page_spinbox.setValue(1)
+        self.page_spinbox.setFixedWidth(60)
+        navigation_layout.addWidget(self.page_spinbox)
+        
+        self.go_button = QPushButton("跳转")
+        navigation_layout.addWidget(self.go_button)
+        
+        navigation_layout.addStretch(1)
+        
+        right_layout.addWidget(navigation_frame)
+        
+        splitter.addWidget(left_panel)
+        splitter.addWidget(right_panel)
+        splitter.setSizes([300, 700])
         
         self._update_navigation_buttons()
         
     def _bind_events(self):
         """绑定事件"""
-        self.input_text.bind("<KeyRelease>", self._on_input_change)
-        self.root.bind("<Configure>", self._on_window_resize)
+        self.input_text.textChanged.connect(self._on_input_change)
         
-        self.student_name_entry.bind("<KeyRelease>", self._on_student_info_change)
-        self.student_class_entry.bind("<KeyRelease>", self._on_student_info_change)
-        self.student_id_entry.bind("<KeyRelease>", self._on_student_info_change)
+        self.student_name_entry.textChanged.connect(self._on_student_info_change)
+        self.student_class_entry.textChanged.connect(self._on_student_info_change)
+        self.student_id_entry.textChanged.connect(self._on_student_info_change)
         
-        self.paper_size_combobox.bind("<<ComboboxSelected>>", self._on_paper_size_change)
-        self.grid_size_combobox.bind("<<ComboboxSelected>>", self._on_grid_size_change)
+        self.paper_size_combobox.currentTextChanged.connect(self._on_paper_size_change)
+        self.grid_size_combobox.currentTextChanged.connect(self._on_grid_size_change)
+        
+        for button in self.grid_type_group.buttons():
+            button.clicked.connect(self._on_grid_type_change)
+        
+        self.prev_button.clicked.connect(self._prev_page)
+        self.next_button.clicked.connect(self._next_page)
+        self.go_button.clicked.connect(self._go_to_page)
+        
+        self.export_button.clicked.connect(self._export_pdf)
         
     def _clean_input(self):
         """清理输入框中的特殊字符"""
         try:
-            current_text = self.input_text.get("1.0", tk.END)
+            cursor = self.input_text.textCursor()
+            cursor_pos = cursor.position()
+            
+            current_text = self.input_text.toPlainText()
             cleaned_text = CopybookPreview.clean_input_text(current_text)
             
             if cleaned_text != current_text:
-                self.input_text.delete("1.0", tk.END)
-                self.input_text.insert("1.0", cleaned_text.rstrip('\n'))
+                self.input_text.blockSignals(True)
+                self.input_text.setPlainText(cleaned_text.rstrip('\n'))
+                cursor = self.input_text.textCursor()
+                cursor.setPosition(min(cursor_pos, len(cleaned_text.rstrip('\n'))))
+                self.input_text.setTextCursor(cursor)
+                self.input_text.blockSignals(False)
         except Exception as e:
             print(f"清理输入时出错: {e}")
         
-    def _on_input_change(self, event=None):
+    def _on_input_change(self):
         """输入变化时的处理"""
-        if event and event.keysym in ('Left', 'Right', 'Up', 'Down', 
-                                       'Shift_L', 'Shift_R', 'Control_L', 'Control_R',
-                                       'Alt_L', 'Alt_R', 'Caps_Lock', 'Tab'):
-            self._schedule_update()
-            return
-        
         self._clean_input()
         self.current_page = 1
         self._schedule_update()
@@ -248,89 +317,84 @@ class CopybookGUI:
         """格子类型变化时的处理"""
         self._schedule_update()
     
-    def _on_paper_size_change(self, event=None):
+    def _on_paper_size_change(self, text):
         """纸张大小变化时的处理"""
+        self.paper_size_var = text
         self.current_page = 1
         self._schedule_update()
     
-    def _on_grid_size_change(self, event=None):
+    def _on_grid_size_change(self, text):
         """格子大小变化时的处理"""
-        grid_size_name = self.grid_size_var.get()
-        grid_size_cm = GridSize.get_size_by_name(grid_size_name)
+        self.grid_size_var = text
+        grid_size_cm = GridSize.get_size_by_name(text)
         self.preview.set_grid_size(grid_size_cm)
         self.current_page = 1
         self._schedule_update()
     
-    def _on_student_info_change(self, event=None):
+    def _on_student_info_change(self):
         """学生信息输入变化时的处理"""
-        if event and event.keysym in ('Left', 'Right', 'Up', 'Down', 
-                                       'Shift_L', 'Shift_R', 'Control_L', 'Control_R',
-                                       'Alt_L', 'Alt_R', 'Caps_Lock', 'Tab'):
-            self._schedule_update()
-            return
-        
         self._validate_and_update_preview()
     
-    def _clean_student_info_entry(self, entry: tk.Entry, validator_func):
-        """清理单个输入框中的无效字符，保留光标位置"""
+    def _clean_student_info_entry(self, entry: QLineEdit, validator_func):
+        """清理单个输入框中的无效字符"""
         try:
-            cursor_pos = entry.index(tk.INSERT)
-            current_text = entry.get()
+            cursor_pos = entry.cursorPosition()
+            current_text = entry.text()
             cleaned_text = validator_func(current_text)
             
             if cleaned_text != current_text:
                 removed_chars = len(current_text) - len(cleaned_text)
                 new_cursor_pos = max(0, cursor_pos - removed_chars)
                 
-                entry.delete(0, tk.END)
-                entry.insert(0, cleaned_text)
-                entry.icursor(new_cursor_pos)
+                entry.blockSignals(True)
+                entry.setText(cleaned_text)
+                entry.setCursorPosition(new_cursor_pos)
+                entry.blockSignals(False)
         except Exception as e:
             print(f"清理输入框时出错: {e}")
     
     def _validate_and_update_preview(self):
         """验证学生信息并更新预览"""
-        name = self.student_name_var.get()
-        class_name = self.student_class_var.get()
-        student_id = self.student_id_var.get()
+        name = self.student_name_entry.text()
+        class_name = self.student_class_entry.text()
+        student_id = self.student_id_entry.text()
         
         valid, error_msg = StudentInfoValidator.is_valid_name(name)
         if not valid:
-            self.validation_label.config(text=error_msg)
+            self.validation_label.setText(error_msg)
             self._clean_student_info_entry(self.student_name_entry, StudentInfoValidator.clean_name)
             return
         
         valid, error_msg = StudentInfoValidator.is_valid_class(class_name)
         if not valid:
-            self.validation_label.config(text=error_msg)
+            self.validation_label.setText(error_msg)
             self._clean_student_info_entry(self.student_class_entry, StudentInfoValidator.clean_class)
             return
         
         valid, error_msg = StudentInfoValidator.is_valid_student_id(student_id)
         if not valid:
-            self.validation_label.config(text=error_msg)
+            self.validation_label.setText(error_msg)
             self._clean_student_info_entry(self.student_id_entry, StudentInfoValidator.clean_student_id)
             return
         
-        self.validation_label.config(text="")
+        self.validation_label.setText("")
         
-        name = self.student_name_var.get()
-        class_name = self.student_class_var.get()
-        student_id = self.student_id_var.get()
+        name = self.student_name_entry.text()
+        class_name = self.student_class_entry.text()
+        student_id = self.student_id_entry.text()
         
         self.preview.set_student_info(name, class_name, student_id)
         self._schedule_update()
     
-    def _on_window_resize(self, event=None):
-        """窗口大小变化时的处理"""
-        if event and event.widget == self.root:
-            canvas_width = self.preview_canvas.winfo_width()
-            canvas_height = self.preview_canvas.winfo_height()
-            
-            if canvas_width != self._last_canvas_width or canvas_height != self._last_canvas_height:
-                self._last_canvas_width = canvas_width
-                self._last_canvas_height = canvas_height
-                self._schedule_update()
+    def _check_resize(self):
+        """检查窗口大小变化"""
+        canvas_width = self.preview_frame.width() - 20
+        canvas_height = self.preview_frame.height() - 20
+        
+        if canvas_width != self._last_canvas_width or canvas_height != self._last_canvas_height:
+            self._last_canvas_width = canvas_width
+            self._last_canvas_height = canvas_height
+            self._schedule_update()
     
     def _prev_page(self):
         """上一页"""
@@ -347,31 +411,30 @@ class CopybookGUI:
     def _go_to_page(self):
         """跳转到指定页"""
         try:
-            page = int(self.page_var.get())
+            page = self.page_spinbox.value()
             if 1 <= page <= self.total_pages:
                 self.current_page = page
                 self._update_preview()
             else:
-                messagebox.showwarning("提示", f"请输入1到{self.total_pages}之间的页码")
+                QMessageBox.warning(self, "提示", f"请输入1到{self.total_pages}之间的页码")
         except ValueError:
-            messagebox.showwarning("提示", "请输入有效的页码")
+            QMessageBox.warning(self, "提示", "请输入有效的页码")
     
     def _update_navigation_buttons(self):
         """更新导航按钮状态"""
-        self.prev_button.config(state="normal" if self.current_page > 1 else "disabled")
-        self.next_button.config(state="normal" if self.current_page < self.total_pages else "disabled")
-        self.page_var.set(str(self.current_page))
-        self.page_label.config(text=f"第 {self.current_page} 页 / 共 {self.total_pages} 页")
+        self.prev_button.setEnabled(self.current_page > 1)
+        self.next_button.setEnabled(self.current_page < self.total_pages)
+        self.page_spinbox.setValue(self.current_page)
+        self.page_spinbox.setMaximum(self.total_pages)
+        self.page_label.setText(f"第 {self.current_page} 页 / 共 {self.total_pages} 页")
         
     def _schedule_update(self):
         """调度更新预览（防抖）"""
-        if self.debounce_job:
-            self.root.after_cancel(self.debounce_job)
-        self.debounce_job = self.root.after(self.debounce_delay, self._update_preview)
+        self.debounce_timer.start(self.debounce_delay)
         
     def _schedule_initial_update(self):
         """调度初始更新"""
-        self.root.after(100, self._update_preview)
+        QTimer.singleShot(100, self._update_preview)
         
     def _calculate_page_size(self, canvas_width: int, canvas_height: int) -> Tuple[int, int, float, float]:
         """
@@ -384,7 +447,7 @@ class CopybookGUI:
         Returns:
             (页面宽度, 页面高度, 水平偏移, 垂直偏移)
         """
-        paper_size_name = self.paper_size_var.get()
+        paper_size_name = self.paper_size_var
         paper_width_mm, paper_height_mm = PaperSize.get_size_by_name(paper_size_name)
         
         paper_aspect_ratio = paper_width_mm / paper_height_mm
@@ -405,27 +468,31 @@ class CopybookGUI:
     def _update_preview(self):
         """更新预览"""
         try:
-            canvas_width = self.preview_canvas.winfo_width()
-            canvas_height = self.preview_canvas.winfo_height()
+            self._check_resize()
+            
+            canvas_width = self.preview_frame.width() - 20
+            canvas_height = self.preview_frame.height() - 20
             
             if canvas_width < 10 or canvas_height < 10:
-                self.root.after(100, self._update_preview)
+                QTimer.singleShot(100, self._update_preview)
                 return
             
-            name = self.student_name_var.get()
-            class_name = self.student_class_var.get()
-            student_id = self.student_id_var.get()
+            name = self.student_name_entry.text()
+            class_name = self.student_class_entry.text()
+            student_id = self.student_id_entry.text()
             self.preview.set_student_info(name, class_name, student_id)
             
-            grid_size_name = self.grid_size_var.get()
+            grid_size_name = self.grid_size_var
             grid_size_cm = GridSize.get_size_by_name(grid_size_name)
             self.preview.set_grid_size(grid_size_cm)
             
             page_width, page_height, offset_x, offset_y = self._calculate_page_size(canvas_width, canvas_height)
             
-            text = self.input_text.get("1.0", tk.END)
+            text = self.input_text.toPlainText()
             characters = CopybookPreview.filter_valid_characters(text)
-            grid_type = self.grid_type_var.get()
+            
+            selected_button = self.grid_type_group.checkedButton()
+            grid_type = selected_button.property("grid_type") if selected_button else GridType.TIANZI
             
             self.total_pages = self.preview.calculate_total_pages(characters, page_width, page_height)
             
@@ -437,9 +504,11 @@ class CopybookGUI:
             img = self.preview.generate_preview_page(characters, self.current_page, grid_type, page_width, page_height)
             
             if img:
-                self.preview_canvas.delete("all")
-                self.preview_image = ImageTk.PhotoImage(img)
-                self.preview_canvas.create_image(offset_x, offset_y, anchor=tk.NW, image=self.preview_image)
+                img = img.convert("RGBA")
+                data = img.tobytes("raw", "RGBA")
+                qimage = QImage(data, img.width, img.height, QImage.Format_RGBA8888)
+                pixmap = QPixmap.fromImage(qimage)
+                self.preview_label.setPixmap(pixmap)
             
         except Exception as e:
             print(f"更新预览时出错: {e}")
@@ -449,39 +518,39 @@ class CopybookGUI:
     def _export_pdf(self):
         """导出PDF文件"""
         if not REPORTLAB_AVAILABLE:
-            messagebox.showerror("错误", "需要安装 reportlab 库\n请运行: pip install reportlab")
+            QMessageBox.critical(self, "错误", "需要安装 reportlab 库\n请运行: pip install reportlab")
             return
         
-        text = self.input_text.get("1.0", tk.END)
+        text = self.input_text.toPlainText()
         characters = CopybookPreview.filter_valid_characters(text)
         
         if not characters:
-            messagebox.showwarning("提示", "请先输入要生成字帖的文字")
+            QMessageBox.warning(self, "提示", "请先输入要生成字帖的文字")
             return
         
         default_filename = datetime.now().strftime("%Y%m%d_%H%M%S") + ".pdf"
         
-        save_path = filedialog.asksaveasfilename(
-            title="保存 PDF",
-            initialfile=default_filename,
-            defaultextension=".pdf",
-            filetypes=[("PDF 文件", "*.pdf"), ("所有文件", "*.*")]
+        save_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "保存 PDF",
+            default_filename,
+            "PDF 文件 (*.pdf);;所有文件 (*.*)"
         )
         
         if not save_path:
             return
         
         try:
-            name = self.student_name_var.get()
-            class_name = self.student_class_var.get()
-            student_id = self.student_id_var.get()
+            name = self.student_name_entry.text()
+            class_name = self.student_class_entry.text()
+            student_id = self.student_id_entry.text()
             self.preview.set_student_info(name, class_name, student_id)
             
-            grid_size_name = self.grid_size_var.get()
+            grid_size_name = self.grid_size_var
             grid_size_cm = GridSize.get_size_by_name(grid_size_name)
             self.preview.set_grid_size(grid_size_cm)
             
-            paper_size_name = self.paper_size_var.get()
+            paper_size_name = self.paper_size_var
             paper_width_mm, paper_height_mm = PaperSize.get_size_by_name(paper_size_name)
             
             paper_width_points = paper_width_mm * mm
@@ -492,7 +561,8 @@ class CopybookGUI:
             content_width = int(paper_width_points - 2 * margin)
             content_height = int(paper_height_points - 2 * margin)
             
-            grid_type = self.grid_type_var.get()
+            selected_button = self.grid_type_group.checkedButton()
+            grid_type = selected_button.property("grid_type") if selected_button else GridType.TIANZI
             pages = self.preview.generate_all_pages(characters, grid_type, content_width, content_height)
             
             c = canvas.Canvas(save_path, pagesize=custom_page_size)
@@ -510,13 +580,15 @@ class CopybookGUI:
                     page_img.save(temp_img_path, "PNG")
                     temp_files.append(temp_img_path)
                     
+                    page_width, page_height = page_img.size
+                    
                     c.drawImage(temp_img_path, margin_x, margin_y, 
                                 width=page_width, height=page_height, 
                                 preserveAspectRatio=True)
                 
                 c.save()
                 
-                messagebox.showinfo("成功", f"PDF 已成功导出:\n{save_path}")
+                QMessageBox.information(self, "成功", f"PDF 已成功导出:\n{save_path}")
                 
             finally:
                 for temp_file in temp_files:
@@ -527,16 +599,36 @@ class CopybookGUI:
                             pass
             
         except Exception as e:
-            messagebox.showerror("错误", f"导出 PDF 时出错:\n{str(e)}")
+            QMessageBox.critical(self, "错误", f"导出 PDF 时出错:\n{str(e)}")
             import traceback
             traceback.print_exc()
 
 
 def main():
     """主函数"""
-    root = tk.Tk()
-    app = CopybookGUI(root)
-    root.mainloop()
+    app = QApplication(sys.argv)
+    
+    app.setStyle('Fusion')
+    
+    palette = QPalette()
+    palette.setColor(QPalette.Window, QColor(240, 240, 240))
+    palette.setColor(QPalette.WindowText, QColor(0, 0, 0))
+    palette.setColor(QPalette.Base, QColor(255, 255, 255))
+    palette.setColor(QPalette.AlternateBase, QColor(245, 245, 245))
+    palette.setColor(QPalette.ToolTipBase, QColor(255, 255, 255))
+    palette.setColor(QPalette.ToolTipText, QColor(0, 0, 0))
+    palette.setColor(QPalette.Text, QColor(0, 0, 0))
+    palette.setColor(QPalette.Button, QColor(240, 240, 240))
+    palette.setColor(QPalette.ButtonText, QColor(0, 0, 0))
+    palette.setColor(QPalette.BrightText, QColor(255, 255, 255))
+    palette.setColor(QPalette.Highlight, QColor(42, 130, 218))
+    palette.setColor(QPalette.HighlightedText, QColor(255, 255, 255))
+    app.setPalette(palette)
+    
+    window = CopybookGUI()
+    window.show()
+    
+    sys.exit(app.exec_())
 
 
 if __name__ == "__main__":
