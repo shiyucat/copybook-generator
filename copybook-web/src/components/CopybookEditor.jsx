@@ -25,7 +25,6 @@ function CopybookEditor({ config, onConfigChange }) {
   const [selectedTemplateId, setSelectedTemplateId] = useState('')
   const [loadingTemplates, setLoadingTemplates] = useState(false)
 
-  const isApplyingTemplate = useRef(false)
   const gridSize = 60
 
   const fetchTemplates = useCallback(async () => {
@@ -45,7 +44,7 @@ function CopybookEditor({ config, onConfigChange }) {
   }, [fetchTemplates])
 
   useEffect(() => {
-    if (config && !isApplyingTemplate.current) {
+    if (config) {
       setInputText(config.input_text || '')
       setGridType(config.grid_type || GridType.TIANZI)
       setFontStyle(config.font_style || 'zhenkai')
@@ -61,7 +60,6 @@ function CopybookEditor({ config, onConfigChange }) {
 
     const template = templates.find((t) => t.template_id === templateId)
     if (template && template.config_data) {
-      isApplyingTemplate.current = true
       const configData = template.config_data
       setGridType(configData.grid_type || GridType.TIANZI)
       setFontStyle(configData.font_style || 'zhenkai')
@@ -69,10 +67,6 @@ function CopybookEditor({ config, onConfigChange }) {
       setStudentId(configData.student_id || '')
       setClassName(configData.class_name || '')
       setInputText(configData.input_text || '')
-
-      setTimeout(() => {
-        isApplyingTemplate.current = false
-      }, 100)
     }
   }, [templates])
 
