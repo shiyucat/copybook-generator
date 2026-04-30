@@ -2345,10 +2345,47 @@ class CopybookGenerator:
         footer_text = f"第 {page_num} 页"
         c.drawString(self.margin_left, 10 * mm, footer_text)
     
+    def _draw_page_from_chars(self, c: canvas.Canvas, chars_on_page: List[str], 
+                                start_row: int, page_num: int):
+        """
+        按预览方式绘制单页字帖（每行一个不同的字符）
+        
+        Args:
+            c: PDF画布对象
+            chars_on_page: 本页要绘制的字符列表
+            start_row: 起始行号（在整个文档中的位置，用于计算当前字符在列表中的索引）
+            page_num: 页码
+        """
+        self._draw_header(c)
+        
+        for row_in_page in range(self.grid_rows):
+            char_index = start_row + row_in_page
+            if char_index < len(chars_on_page):
+                current_char = chars_on_page[char_index]
+            else:
+                current_char = ""
+            
+            for col in range(self.grid_cols):
+                x = self.margin_left + self.grid_padding + col * self.grid_size
+                y = self.paper_height - self.margin_top - (row_in_page + 1) * self.grid_size
+                
+                is_template = (col == 0) and (current_char != "")
+                char_to_draw = current_char if is_template else ""
+                
+                self._draw_grid(c, x, y, 
+                               is_stroke_demo=is_template,
+                               is_highlight=is_template,
+                               character=char_to_draw)
+        
+        c.setFont("Helvetica", 10)
+        c.setFillColor(gray)
+        footer_text = f"第 {page_num} 页"
+        c.drawString(self.margin_left, 10 * mm, footer_text)
+    
     def generate(self, character: str, output_path: str, 
                  num_pages: int = 1) -> Tuple[bool, str]:
         """
-        生成字帖
+        生成字帖（旧方式：单字重复）
         
         Args:
             character: 要生成的汉字
@@ -2367,6 +2404,43 @@ class CopybookGenerator:
             
             for page_num in range(1, num_pages + 1):
                 self._draw_page(c, character, page_num)
+                c.showPage()
+            
+            c.save()
+            return True, f"字帖已成功生成：{output_path}"
+            
+        except Exception as e:
+            return False, f"生成字帖时发生错误：{str(e)}"
+    
+    def generate_from_chars(self, characters: List[str], output_path: str) -> Tuple[bool, str]:
+        """
+        按预览方式生成字帖（每行一个不同的字符）
+        
+        Args:
+            characters: 要生成的字符列表
+            output_path: 输出PDF文件路径
+            
+        Returns:
+            Tuple[bool, str]: (是否成功, 错误信息)
+        """
+        if not characters:
+            return False, "没有可生成的字符"
+        
+        for char in characters:
+            is_valid, error_msg = self.validate_input(char)
+            if not is_valid:
+                return False, error_msg
+        
+        try:
+            c = canvas.Canvas(output_path, pagesize=A4)
+            
+            total_chars = len(characters)
+            chars_per_page = self.grid_rows
+            total_pages = (total_chars + chars_per_page - 1) // chars_per_page
+            
+            for page_num in range(1, total_pages + 1):
+                start_row = (page_num - 1) * chars_per_page
+                self._draw_page_from_chars(c, characters, start_row, page_num)
                 c.showPage()
             
             c.save()

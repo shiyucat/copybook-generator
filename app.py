@@ -340,14 +340,13 @@ def get_template_count():
 @app.route('/api/export/pdf', methods=['POST'])
 def export_pdf():
     """
-    导出PDF字帖
+    导出PDF字帖（按预览方式生成，每行一个字符）
     
     Request Body:
         {
-            "character": "要生成的汉字",
-            "grid_type": "mizi",
+            "characters": ["一", "二", "三"],
+            "grid_type": "田字格",
             "font_style": "zhenkai",
-            "pages": 1,
             "student_name": "学生姓名",
             "student_id": "学号",
             "class_name": "班级"
@@ -365,14 +364,15 @@ def export_pdf():
                 'error': '请求数据为空'
             }), 400
         
-        character = data.get('character', '')
-        if not character:
+        characters = data.get('characters', [])
+        if not characters:
             return jsonify({
                 'success': False,
                 'error': '请输入要生成的汉字'
             }), 400
         
-        character = character[0]
+        if not isinstance(characters, list):
+            characters = [characters]
         
         grid_type = data.get('grid_type', '田字格')
         if grid_type in ['田字格', 'tianzi']:
@@ -381,10 +381,6 @@ def export_pdf():
             grid_type_code = 'mizi'
         
         font_style = data.get('font_style', 'zhenkai')
-        pages = data.get('pages', 1)
-        if isinstance(pages, str):
-            pages = int(pages)
-        pages = max(1, min(pages, 10))
         
         student_name = data.get('student_name', '')
         student_id = data.get('student_id', '')
@@ -403,7 +399,7 @@ def export_pdf():
                 class_name=class_name
             )
             
-            success, message = generator.generate(character, output_path, pages)
+            success, message = generator.generate_from_chars(characters, output_path)
             
             if not success:
                 os.unlink(output_path)
@@ -417,7 +413,8 @@ def export_pdf():
             
             os.unlink(output_path)
             
-            filename = f"{character}_字帖.pdf"
+            first_char = characters[0] if characters else ''
+            filename = f"{first_char}_字帖.pdf" if first_char else "字帖.pdf"
             encoded_filename = urllib.parse.quote(filename)
             
             response = make_response(pdf_data)
