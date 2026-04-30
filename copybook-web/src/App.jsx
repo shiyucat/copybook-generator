@@ -10,6 +10,7 @@ function App() {
     input_text: '',
     grid_type: '田字格',
     grid_size: 60,
+    font_style: 'zhenkai',
     student_name: '',
     student_id: '',
     class_name: '',
