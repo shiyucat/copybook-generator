@@ -10,9 +10,6 @@ function App() {
     input_text: '',
     grid_type: '田字格',
     grid_size: 60,
-    student_name: '',
-    student_id: '',
-    class_name: '',
   })
 
   const handleConfigChange = useCallback((newConfig) => {

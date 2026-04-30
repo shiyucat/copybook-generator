@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react'
+import templateApi from '../services/api'
 
 const GridType = {
   TIANZI: '田字格',
@@ -11,19 +12,16 @@ function CopybookEditor({ config, onConfigChange }) {
   const canvasRef = useRef(null)
   const [inputText, setInputText] = useState(config.input_text || '')
   const [gridType, setGridType] = useState(config.grid_type || GridType.TIANZI)
-  const [gridSize, setGridSize] = useState(config.grid_size || 60)
-  const [studentName, setStudentName] = useState(config.student_name || '')
-  const [studentId, setStudentId] = useState(config.student_id || '')
-  const [className, setClassName] = useState(config.class_name || '')
+  const [showSaveDialog, setShowSaveDialog] = useState(false)
+  const [newTemplateName, setNewTemplateName] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  const gridSize = 60
 
   useEffect(() => {
     if (config) {
       setInputText(config.input_text || '')
       setGridType(config.grid_type || GridType.TIANZI)
-      setGridSize(config.grid_size || 60)
-      setStudentName(config.student_name || '')
-      setStudentId(config.student_id || '')
-      setClassName(config.class_name || '')
     }
   }, [config])
 
@@ -32,14 +30,11 @@ function CopybookEditor({ config, onConfigChange }) {
       input_text: inputText,
       grid_type: gridType,
       grid_size: gridSize,
-      student_name: studentName,
-      student_id: studentId,
-      class_name: className,
     }
     if (onConfigChange) {
       onConfigChange(newConfig)
     }
-  }, [inputText, gridType, gridSize, studentName, studentId, className, onConfigChange])
+  }, [inputText, gridType, onConfigChange])
 
   const drawGrid = useCallback((ctx, x, y, size, type, character = '', isTemplate = false) => {
     if (isTemplate && character) {
@@ -109,9 +104,10 @@ function CopybookEditor({ config, onConfigChange }) {
 
     const padding = 5
     const size = gridSize
+    const gridPadding = 5
 
-    const cols = Math.max(1, Math.floor((width - padding * 2) / (size + padding)))
-    const maxRows = Math.max(1, Math.floor((height - padding * 2) / (size + padding)))
+    const cols = Math.max(1, Math.floor((width - padding * 2) / (size + gridPadding)))
+    const maxRows = Math.max(1, Math.floor((height - padding * 2) / (size + gridPadding)))
 
     const validChars = (inputText || '')
       .split('')
@@ -128,8 +124,8 @@ function CopybookEditor({ config, onConfigChange }) {
     if (validChars.length === 0) {
       for (let row = 0; row < maxRows; row++) {
         for (let col = 0; col < cols; col++) {
-          const x = padding + col * (size + padding)
-          const y = padding + row * (size + padding)
+          const x = padding + col * (size + gridPadding)
+          const y = padding + row * (size + gridPadding)
           if (x + size <= width && y + size <= height) {
             drawGrid(ctx, x, y, size, gridType)
           }
@@ -146,8 +142,8 @@ function CopybookEditor({ config, onConfigChange }) {
       const currentChar = validChars[charIndex]
 
       for (let col = 0; col < cols; col++) {
-        const x = padding + col * (size + padding)
-        const y = padding + rowIndex * (size + padding)
+        const x = padding + col * (size + gridPadding)
+        const y = padding + rowIndex * (size + gridPadding)
 
         if (x + size > width || y + size > height) {
           continue
@@ -162,7 +158,7 @@ function CopybookEditor({ config, onConfigChange }) {
       charIndex++
       rowIndex++
     }
-  }, [inputText, gridType, gridSize, drawGrid])
+  }, [inputText, gridType, drawGrid])
 
   useEffect(() => {
     generatePreview()
@@ -192,6 +188,33 @@ function CopybookEditor({ config, onConfigChange }) {
     }
   }, [generatePreview])
 
+  const handleSaveTemplate = async () => {
+    if (!newTemplateName.trim()) {
+      alert('请输入模版名称')
+      return
+    }
+
+    setSaving(true)
+    try {
+      const templateData = {
+        template_name: newTemplateName.trim(),
+        config_data: {
+          input_text: inputText,
+          grid_type: gridType,
+          grid_size: gridSize,
+        },
+      }
+      await templateApi.create(templateData)
+      setNewTemplateName('')
+      setShowSaveDialog(false)
+      alert('模版保存成功')
+    } catch (err) {
+      alert(`保存失败: ${err.message}`)
+    } finally {
+      setSaving(false)
+    }
+  }
+
   const gridTypes = [
     { value: GridType.TIANZI, label: '田字格' },
     { value: GridType.MIZI, label: '米字格' },
@@ -202,40 +225,6 @@ function CopybookEditor({ config, onConfigChange }) {
   return (
     <div className="editor-container">
       <div className="editor-left">
-        <div className="section">
-          <h3 className="section-title">学生信息</h3>
-          <div className="form-group">
-            <label className="form-label">姓名</label>
-            <input
-              type="text"
-              className="form-input"
-              value={studentName}
-              onChange={(e) => setStudentName(e.target.value)}
-              placeholder="请输入姓名"
-            />
-          </div>
-          <div className="form-group">
-            <label className="form-label">学号</label>
-            <input
-              type="text"
-              className="form-input"
-              value={studentId}
-              onChange={(e) => setStudentId(e.target.value)}
-              placeholder="请输入学号"
-            />
-          </div>
-          <div className="form-group">
-            <label className="form-label">班级</label>
-            <input
-              type="text"
-              className="form-input"
-              value={className}
-              onChange={(e) => setClassName(e.target.value)}
-              placeholder="请输入班级"
-            />
-          </div>
-        </div>
-
         <div className="section">
           <h3 className="section-title">输入文字</h3>
           <textarea
@@ -271,18 +260,13 @@ function CopybookEditor({ config, onConfigChange }) {
         </div>
 
         <div className="section">
-          <h3 className="section-title">格子设置</h3>
-          <div className="form-group">
-            <label className="form-label">格子大小: {gridSize}px</label>
-            <input
-              type="range"
-              min="30"
-              max="100"
-              value={gridSize}
-              onChange={(e) => setGridSize(parseInt(e.target.value))}
-              className="slider"
-            />
-          </div>
+          <button
+            className="btn btn-primary"
+            style={{ width: '100%' }}
+            onClick={() => setShowSaveDialog(true)}
+          >
+            保存模版
+          </button>
         </div>
       </div>
 
@@ -294,6 +278,48 @@ function CopybookEditor({ config, onConfigChange }) {
           <canvas ref={canvasRef} className="preview-canvas" />
         </div>
       </div>
+
+      {showSaveDialog && (
+        <div className="modal-overlay" onClick={() => setShowSaveDialog(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>保存为模版</h3>
+              <button
+                className="modal-close"
+                onClick={() => setShowSaveDialog(false)}
+              >
+                ✕
+              </button>
+            </div>
+            <div className="modal-body">
+              <label className="form-label">模版名称</label>
+              <input
+                type="text"
+                className="form-input"
+                value={newTemplateName}
+                onChange={(e) => setNewTemplateName(e.target.value)}
+                placeholder="请输入模版名称"
+                autoFocus
+              />
+            </div>
+            <div className="modal-footer">
+              <button
+                className="btn btn-secondary"
+                onClick={() => setShowSaveDialog(false)}
+              >
+                取消
+              </button>
+              <button
+                className="btn btn-primary"
+                onClick={handleSaveTemplate}
+                disabled={saving || !newTemplateName.trim()}
+              >
+                {saving ? '保存中...' : '保存'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

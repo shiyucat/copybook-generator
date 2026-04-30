@@ -1,4 +1,5 @@
 reportlab
 Pillow
 hanzi-writer-data
-PyQt5>=5.15.0
+Flask
+flask-cors
