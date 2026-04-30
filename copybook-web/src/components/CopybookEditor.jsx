@@ -20,8 +20,6 @@ function CopybookEditor({ config, onConfigChange }) {
   const [newTemplateName, setNewTemplateName] = useState('')
   const [saving, setSaving] = useState(false)
   const [showExportDialog, setShowExportDialog] = useState(false)
-  const [exportCharacter, setExportCharacter] = useState('')
-  const [exportPages, setExportPages] = useState(1)
   const [exporting, setExporting] = useState(false)
 
   const gridSize = 60
@@ -241,23 +239,21 @@ function CopybookEditor({ config, onConfigChange }) {
       alert('请先输入汉字')
       return
     }
-    setExportCharacter(validChars[0])
     setShowExportDialog(true)
   }
 
   const handleExport = async () => {
-    if (!exportCharacter) {
-      alert('请选择要生成字帖的汉字')
+    if (validChars.length === 0) {
+      alert('请先输入汉字')
       return
     }
 
     setExporting(true)
     try {
       const exportData = {
-        character: exportCharacter,
+        characters: validChars,
         grid_type: gridType,
         font_style: fontStyle,
-        pages: exportPages,
         student_name: studentName,
         student_id: studentId,
         class_name: className,
@@ -456,41 +452,31 @@ function CopybookEditor({ config, onConfigChange }) {
             </div>
             <div className="modal-body">
               <div className="form-group">
-                <label className="form-label">选择汉字</label>
-                <select
-                  className="form-input"
-                  value={exportCharacter}
-                  onChange={(e) => setExportCharacter(e.target.value)}
-                >
-                  {validChars.map((char, index) => (
-                    <option key={index} value={char}>
-                      {char}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">页数</label>
-                <select
-                  className="form-input"
-                  value={exportPages}
-                  onChange={(e) => setExportPages(parseInt(e.target.value))}
-                >
-                  {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => (
-                    <option key={n} value={n}>
-                      {n} 页
-                    </option>
-                  ))}
-                </select>
+                <label className="form-label">导出预览</label>
+                <div style={{ padding: '12px', backgroundColor: '#f8f9fa', borderRadius: '4px' }}>
+                  <p style={{ fontSize: '13px', margin: '4px 0' }}>
+                    字符数量：<strong>{validChars.length} 个</strong>
+                  </p>
+                  <p style={{ fontSize: '13px', margin: '4px 0' }}>
+                    字符：<strong>{validChars.slice(0, 10).join('')}{validChars.length > 10 ? '...' : ''}</strong>
+                  </p>
+                  <p style={{ fontSize: '13px', margin: '4px 0' }}>
+                    格子类型：<strong>{gridType}</strong>
+                  </p>
+                  <p style={{ fontSize: '13px', margin: '4px 0' }}>
+                    字体样式：<strong>{fontStyle === 'xingkai' ? '行楷' : '正楷'}</strong>
+                  </p>
+                </div>
               </div>
 
               {(studentName || studentId || className) && (
-                <div className="form-group" style={{ padding: '12px', backgroundColor: '#f8f9fa', borderRadius: '4px' }}>
+                <div className="form-group">
                   <label className="form-label" style={{ fontWeight: '600' }}>页眉信息（将显示在PDF顶部）</label>
-                  {studentName && <p style={{ fontSize: '13px', margin: '4px 0' }}>姓名：{studentName}</p>}
-                  {className && <p style={{ fontSize: '13px', margin: '4px 0' }}>班级：{className}</p>}
-                  {studentId && <p style={{ fontSize: '13px', margin: '4px 0' }}>学号：{studentId}</p>}
+                  <div style={{ padding: '12px', backgroundColor: '#f8f9fa', borderRadius: '4px' }}>
+                    {studentName && <p style={{ fontSize: '13px', margin: '4px 0' }}>姓名：{studentName}</p>}
+                    {className && <p style={{ fontSize: '13px', margin: '4px 0' }}>班级：{className}</p>}
+                    {studentId && <p style={{ fontSize: '13px', margin: '4px 0' }}>学号：{studentId}</p>}
+                  </div>
                 </div>
               )}
             </div>
@@ -504,7 +490,7 @@ function CopybookEditor({ config, onConfigChange }) {
               <button
                 className="btn btn-primary"
                 onClick={handleExport}
-                disabled={exporting || !exportCharacter}
+                disabled={exporting || validChars.length === 0}
               >
                 {exporting ? '导出中...' : '导出'}
               </button>
