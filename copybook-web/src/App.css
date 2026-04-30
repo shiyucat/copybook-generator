@@ -152,6 +152,22 @@ body {
   border-color: var(--primary-color);
 }
 
+.form-select {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  font-size: 14px;
+  background-color: #fff;
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+
+.form-select:focus {
+  outline: none;
+  border-color: var(--primary-color);
+}
+
 .text-input {
   width: 100%;
   padding: 10px 12px;
