@@ -21,8 +21,27 @@ function CopybookEditor({ config, onConfigChange }) {
   const [saving, setSaving] = useState(false)
   const [showExportDialog, setShowExportDialog] = useState(false)
   const [exporting, setExporting] = useState(false)
+  const [templates, setTemplates] = useState([])
+  const [selectedTemplateId, setSelectedTemplateId] = useState('')
+  const [loadingTemplates, setLoadingTemplates] = useState(false)
 
   const gridSize = 60
+
+  const fetchTemplates = useCallback(async () => {
+    setLoadingTemplates(true)
+    try {
+      const data = await templateApi.getAll()
+      setTemplates(data || [])
+    } catch (err) {
+      console.error('获取模版列表失败:', err)
+    } finally {
+      setLoadingTemplates(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchTemplates()
+  }, [fetchTemplates])
 
   useEffect(() => {
     if (config) {
@@ -34,6 +53,24 @@ function CopybookEditor({ config, onConfigChange }) {
       setClassName(config.class_name || '')
     }
   }, [config])
+
+  const handleSelectTemplate = useCallback((templateId) => {
+    setSelectedTemplateId(templateId)
+    if (!templateId) return
+
+    const template = templates.find((t) => t.template_id === templateId)
+    if (template && template.config_data) {
+      const configData = template.config_data
+      setGridType(configData.grid_type || GridType.TIANZI)
+      setFontStyle(configData.font_style || 'zhenkai')
+      setStudentName(configData.student_name || '')
+      setStudentId(configData.student_id || '')
+      setClassName(configData.class_name || '')
+      if (configData.input_text) {
+        setInputText(configData.input_text)
+      }
+    }
+  }, [templates])
 
   useEffect(() => {
     const newConfig = {
@@ -130,18 +167,41 @@ function CopybookEditor({ config, onConfigChange }) {
     ctx.fillStyle = '#ffffff'
     ctx.fillRect(0, 0, width, height)
 
+    const hasStudentInfo = studentName || studentId || className
+    const headerHeight = hasStudentInfo ? 30 : 0
     const padding = 5
     const size = gridSize
     const gridPadding = 5
 
+    const contentHeight = height - headerHeight - padding * 2
     const cols = Math.max(1, Math.floor((width - padding * 2) / (size + gridPadding)))
-    const maxRows = Math.max(1, Math.floor((height - padding * 2) / (size + gridPadding)))
+    const maxRows = Math.max(1, Math.floor(contentHeight / (size + gridPadding)))
+
+    if (hasStudentInfo) {
+      ctx.font = '12px sans-serif'
+      ctx.textAlign = 'right'
+      ctx.textBaseline = 'middle'
+      ctx.fillStyle = '#333'
+
+      const infoParts = []
+      if (studentName) infoParts.push(`姓名：${studentName}`)
+      if (studentId) infoParts.push(`学号：${studentId}`)
+      if (className) infoParts.push(`班级：${className}`)
+
+      const infoText = infoParts.join('  ')
+      const x = width - padding
+      const y = headerHeight / 2
+
+      ctx.fillText(infoText, x, y)
+    }
+
+    const contentTopY = headerHeight + padding
 
     if (validChars.length === 0) {
       for (let row = 0; row < maxRows; row++) {
         for (let col = 0; col < cols; col++) {
           const x = padding + col * (size + gridPadding)
-          const y = padding + row * (size + gridPadding)
+          const y = contentTopY + row * (size + gridPadding)
           if (x + size <= width && y + size <= height) {
             drawGrid(ctx, x, y, size, gridType)
           }
@@ -159,7 +219,7 @@ function CopybookEditor({ config, onConfigChange }) {
 
       for (let col = 0; col < cols; col++) {
         const x = padding + col * (size + gridPadding)
-        const y = padding + rowIndex * (size + gridPadding)
+        const y = contentTopY + rowIndex * (size + gridPadding)
 
         if (x + size > width || y + size > height) {
           continue
@@ -174,7 +234,7 @@ function CopybookEditor({ config, onConfigChange }) {
       charIndex++
       rowIndex++
     }
-  }, [validChars, gridType, drawGrid, gridSize])
+  }, [validChars, gridType, drawGrid, gridSize, studentName, studentId, className])
 
   useEffect(() => {
     generatePreview()
@@ -284,6 +344,30 @@ function CopybookEditor({ config, onConfigChange }) {
     <div className="editor-container">
       <div className="editor-left">
         <div className="section">
+          <h3 className="section-title">选择模版</h3>
+          <div className="form-group">
+            <select
+              className="form-select"
+              value={selectedTemplateId}
+              onChange={(e) => handleSelectTemplate(e.target.value)}
+              disabled={loadingTemplates || templates.length === 0}
+            >
+              <option value="">-- 选择模版 --</option>
+              {templates.map((template) => (
+                <option key={template.template_id} value={template.template_id}>
+                  {template.template_name}
+                </option>
+              ))}
+            </select>
+            {templates.length === 0 && !loadingTemplates && (
+              <p className="input-hint" style={{ marginTop: '8px' }}>
+                暂无保存的模版，请先保存模版
+              </p>
+            )}
+          </div>
+        </div>
+
+        <div className="section">
           <h3 className="section-title">输入文字</h3>
           <textarea
             className="text-input"
@@ -317,8 +401,13 @@ function CopybookEditor({ config, onConfigChange }) {
               type="text"
               className="form-input"
               value={studentId}
-              onChange={(e) => setStudentId(e.target.value)}
-              placeholder="请输入学号"
+              onChange={(e) => {
+                const value = e.target.value
+                if (/^[a-zA-Z0-9]*$/.test(value)) {
+                  setStudentId(value)
+                }
+              }}
+              placeholder="请输入学号（仅支持数字和英文）"
             />
           </div>
           <div className="form-group">
@@ -335,37 +424,35 @@ function CopybookEditor({ config, onConfigChange }) {
 
         <div className="section">
           <h3 className="section-title">格子类型</h3>
-          <div className="radio-group">
-            {gridTypes.map((type) => (
-              <label key={type.value} className="radio-label">
-                <input
-                  type="radio"
-                  name="gridType"
-                  value={type.value}
-                  checked={gridType === type.value}
-                  onChange={(e) => setGridType(e.target.value)}
-                />
-                <span>{type.label}</span>
-              </label>
-            ))}
+          <div className="form-group">
+            <select
+              className="form-select"
+              value={gridType}
+              onChange={(e) => setGridType(e.target.value)}
+            >
+              {gridTypes.map((type) => (
+                <option key={type.value} value={type.value}>
+                  {type.label}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
 
         <div className="section">
           <h3 className="section-title">字体样式</h3>
-          <div className="radio-group">
-            {fontStyles.map((style) => (
-              <label key={style.value} className="radio-label">
-                <input
-                  type="radio"
-                  name="fontStyle"
-                  value={style.value}
-                  checked={fontStyle === style.value}
-                  onChange={(e) => setFontStyle(e.target.value)}
-                />
-                <span>{style.label}</span>
-              </label>
-            ))}
+          <div className="form-group">
+            <select
+              className="form-select"
+              value={fontStyle}
+              onChange={(e) => setFontStyle(e.target.value)}
+            >
+              {fontStyles.map((style) => (
+                <option key={style.value} value={style.value}>
+                  {style.label}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
 
