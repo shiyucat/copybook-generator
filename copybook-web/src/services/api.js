@@ -64,4 +64,43 @@ export const templateApi = {
   },
 }
 
+export const exportApi = {
+  async exportPdf(exportData) {
+    const response = await fetch(`${API_BASE}/export/pdf`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(exportData),
+    })
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}))
+      throw new Error(errorData.error || '导出失败')
+    }
+
+    const blob = await response.blob()
+    const contentDisposition = response.headers.get('Content-Disposition')
+    let filename = '字帖.pdf'
+    
+    if (contentDisposition) {
+      const match = contentDisposition.match(/filename\*=UTF-8''(.+)/)
+      if (match) {
+        filename = decodeURIComponent(match[1])
+      }
+    }
+
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    window.URL.revokeObjectURL(url)
+
+    return { success: true, filename }
+  },
+}
+
 export default templateApi

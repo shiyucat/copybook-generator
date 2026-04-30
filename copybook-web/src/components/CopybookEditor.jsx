@@ -1,5 +1,5 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react'
-import templateApi from '../services/api'
+import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react'
+import templateApi, { exportApi } from '../services/api'
 
 const GridType = {
   TIANZI: '田字格',
@@ -12,9 +12,17 @@ function CopybookEditor({ config, onConfigChange }) {
   const canvasRef = useRef(null)
   const [inputText, setInputText] = useState(config.input_text || '')
   const [gridType, setGridType] = useState(config.grid_type || GridType.TIANZI)
+  const [studentName, setStudentName] = useState(config.student_name || '')
+  const [studentId, setStudentId] = useState(config.student_id || '')
+  const [className, setClassName] = useState(config.class_name || '')
   const [showSaveDialog, setShowSaveDialog] = useState(false)
   const [newTemplateName, setNewTemplateName] = useState('')
   const [saving, setSaving] = useState(false)
+  const [showExportDialog, setShowExportDialog] = useState(false)
+  const [exportCharacter, setExportCharacter] = useState('')
+  const [exportFontStyle, setExportFontStyle] = useState('zhenkai')
+  const [exportPages, setExportPages] = useState(1)
+  const [exporting, setExporting] = useState(false)
 
   const gridSize = 60
 
@@ -22,6 +30,9 @@ function CopybookEditor({ config, onConfigChange }) {
     if (config) {
       setInputText(config.input_text || '')
       setGridType(config.grid_type || GridType.TIANZI)
+      setStudentName(config.student_name || '')
+      setStudentId(config.student_id || '')
+      setClassName(config.class_name || '')
     }
   }, [config])
 
@@ -30,11 +41,14 @@ function CopybookEditor({ config, onConfigChange }) {
       input_text: inputText,
       grid_type: gridType,
       grid_size: gridSize,
+      student_name: studentName,
+      student_id: studentId,
+      class_name: className,
     }
     if (onConfigChange) {
       onConfigChange(newConfig)
     }
-  }, [inputText, gridType, onConfigChange])
+  }, [inputText, gridType, studentName, studentId, className, onConfigChange])
 
   const drawGrid = useCallback((ctx, x, y, size, type, character = '', isTemplate = false) => {
     if (isTemplate && character) {
@@ -91,6 +105,20 @@ function CopybookEditor({ config, onConfigChange }) {
     }
   }, [])
 
+  const validChars = useMemo(() => {
+    return (inputText || '')
+      .split('')
+      .filter((char) => {
+        if (
+          /^[\u4e00-\u9fff\u3400-\u4dbf]$/.test(char) ||
+          /^[a-zA-Z0-9]$/.test(char)
+        ) {
+          return true
+        }
+        return false
+      })
+  }, [inputText])
+
   const generatePreview = useCallback(() => {
     const canvas = canvasRef.current
     if (!canvas) return
@@ -108,18 +136,6 @@ function CopybookEditor({ config, onConfigChange }) {
 
     const cols = Math.max(1, Math.floor((width - padding * 2) / (size + gridPadding)))
     const maxRows = Math.max(1, Math.floor((height - padding * 2) / (size + gridPadding)))
-
-    const validChars = (inputText || '')
-      .split('')
-      .filter((char) => {
-        if (
-          /^[\u4e00-\u9fff\u3400-\u4dbf]$/.test(char) ||
-          /^[a-zA-Z0-9]$/.test(char)
-        ) {
-          return true
-        }
-        return false
-      })
 
     if (validChars.length === 0) {
       for (let row = 0; row < maxRows; row++) {
@@ -158,7 +174,7 @@ function CopybookEditor({ config, onConfigChange }) {
       charIndex++
       rowIndex++
     }
-  }, [inputText, gridType, drawGrid])
+  }, [validChars, gridType, drawGrid, gridSize])
 
   useEffect(() => {
     generatePreview()
@@ -202,6 +218,9 @@ function CopybookEditor({ config, onConfigChange }) {
           input_text: inputText,
           grid_type: gridType,
           grid_size: gridSize,
+          student_name: studentName,
+          student_id: studentId,
+          class_name: className,
         },
       }
       await templateApi.create(templateData)
@@ -215,11 +234,52 @@ function CopybookEditor({ config, onConfigChange }) {
     }
   }
 
+  const handleOpenExportDialog = () => {
+    if (validChars.length === 0) {
+      alert('请先输入汉字')
+      return
+    }
+    setExportCharacter(validChars[0])
+    setShowExportDialog(true)
+  }
+
+  const handleExport = async () => {
+    if (!exportCharacter) {
+      alert('请选择要生成字帖的汉字')
+      return
+    }
+
+    setExporting(true)
+    try {
+      const exportData = {
+        character: exportCharacter,
+        grid_type: gridType,
+        font_style: exportFontStyle,
+        pages: exportPages,
+        student_name: studentName,
+        student_id: studentId,
+        class_name: className,
+      }
+      await exportApi.exportPdf(exportData)
+      setShowExportDialog(false)
+      alert('PDF导出成功')
+    } catch (err) {
+      alert(`导出失败: ${err.message}`)
+    } finally {
+      setExporting(false)
+    }
+  }
+
   const gridTypes = [
     { value: GridType.TIANZI, label: '田字格' },
     { value: GridType.MIZI, label: '米字格' },
     { value: GridType.HUIGONG, label: '回宫格' },
     { value: GridType.FANGGE, label: '方格' },
+  ]
+
+  const fontStyles = [
+    { value: 'zhenkai', label: '正楷' },
+    { value: 'xingkai', label: '行楷' },
   ]
 
   return (
@@ -239,6 +299,40 @@ function CopybookEditor({ config, onConfigChange }) {
             空格和换行不占格<br />
             不支持：标点符号、特殊字符
           </p>
+        </div>
+
+        <div className="section">
+          <h3 className="section-title">学生信息</h3>
+          <div className="form-group">
+            <label className="form-label">姓名</label>
+            <input
+              type="text"
+              className="form-input"
+              value={studentName}
+              onChange={(e) => setStudentName(e.target.value)}
+              placeholder="请输入姓名"
+            />
+          </div>
+          <div className="form-group">
+            <label className="form-label">学号</label>
+            <input
+              type="text"
+              className="form-input"
+              value={studentId}
+              onChange={(e) => setStudentId(e.target.value)}
+              placeholder="请输入学号"
+            />
+          </div>
+          <div className="form-group">
+            <label className="form-label">班级</label>
+            <input
+              type="text"
+              className="form-input"
+              value={className}
+              onChange={(e) => setClassName(e.target.value)}
+              placeholder="请输入班级"
+            />
+          </div>
         </div>
 
         <div className="section">
@@ -262,6 +356,13 @@ function CopybookEditor({ config, onConfigChange }) {
         <div className="section">
           <button
             className="btn btn-primary"
+            style={{ width: '100%', marginBottom: '12px' }}
+            onClick={handleOpenExportDialog}
+          >
+            导出PDF字帖
+          </button>
+          <button
+            className="btn btn-secondary"
             style={{ width: '100%' }}
             onClick={() => setShowSaveDialog(true)}
           >
@@ -315,6 +416,95 @@ function CopybookEditor({ config, onConfigChange }) {
                 disabled={saving || !newTemplateName.trim()}
               >
                 {saving ? '保存中...' : '保存'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showExportDialog && (
+        <div className="modal-overlay" onClick={() => setShowExportDialog(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>导出PDF字帖</h3>
+              <button
+                className="modal-close"
+                onClick={() => setShowExportDialog(false)}
+              >
+                ✕
+              </button>
+            </div>
+            <div className="modal-body">
+              <div className="form-group">
+                <label className="form-label">选择汉字</label>
+                <select
+                  className="form-input"
+                  value={exportCharacter}
+                  onChange={(e) => setExportCharacter(e.target.value)}
+                >
+                  {validChars.map((char, index) => (
+                    <option key={index} value={char}>
+                      {char}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">字体样式</label>
+                <div className="radio-group">
+                  {fontStyles.map((style) => (
+                    <label key={style.value} className="radio-label">
+                      <input
+                        type="radio"
+                        name="exportFontStyle"
+                        value={style.value}
+                        checked={exportFontStyle === style.value}
+                        onChange={(e) => setExportFontStyle(e.target.value)}
+                      />
+                      <span>{style.label}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">页数</label>
+                <select
+                  className="form-input"
+                  value={exportPages}
+                  onChange={(e) => setExportPages(parseInt(e.target.value))}
+                >
+                  {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => (
+                    <option key={n} value={n}>
+                      {n} 页
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {(studentName || studentId || className) && (
+                <div className="form-group" style={{ padding: '12px', backgroundColor: '#f8f9fa', borderRadius: '4px' }}>
+                  <label className="form-label" style={{ fontWeight: '600' }}>页眉信息（将显示在PDF顶部）</label>
+                  {studentName && <p style={{ fontSize: '13px', margin: '4px 0' }}>姓名：{studentName}</p>}
+                  {className && <p style={{ fontSize: '13px', margin: '4px 0' }}>班级：{className}</p>}
+                  {studentId && <p style={{ fontSize: '13px', margin: '4px 0' }}>学号：{studentId}</p>}
+                </div>
+              )}
+            </div>
+            <div className="modal-footer">
+              <button
+                className="btn btn-secondary"
+                onClick={() => setShowExportDialog(false)}
+              >
+                取消
+              </button>
+              <button
+                className="btn btn-primary"
+                onClick={handleExport}
+                disabled={exporting || !exportCharacter}
+              >
+                {exporting ? '导出中...' : '导出'}
               </button>
             </div>
           </div>
