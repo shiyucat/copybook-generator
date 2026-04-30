@@ -15,6 +15,7 @@ from flask_cors import CORS
 from pathlib import Path
 
 from database import TemplateDatabase, Template
+from copybook_generator import CopybookGenerator
 
 
 app = Flask(__name__)
@@ -336,6 +337,107 @@ def get_template_count():
         }), 500
 
 
+@app.route('/api/export/pdf', methods=['POST'])
+def export_pdf():
+    """
+    导出PDF字帖
+    
+    Request Body:
+        {
+            "character": "要生成的汉字",
+            "grid_type": "mizi",
+            "font_style": "zhenkai",
+            "pages": 1,
+            "student_name": "学生姓名",
+            "student_id": "学号",
+            "class_name": "班级"
+        }
+    
+    Returns:
+        PDF文件下载
+    """
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({
+                'success': False,
+                'error': '请求数据为空'
+            }), 400
+        
+        character = data.get('character', '')
+        if not character:
+            return jsonify({
+                'success': False,
+                'error': '请输入要生成的汉字'
+            }), 400
+        
+        character = character[0]
+        
+        grid_type = data.get('grid_type', '田字格')
+        if grid_type in ['田字格', 'tianzi']:
+            grid_type_code = 'tianzi'
+        else:
+            grid_type_code = 'mizi'
+        
+        font_style = data.get('font_style', 'zhenkai')
+        pages = data.get('pages', 1)
+        if isinstance(pages, str):
+            pages = int(pages)
+        pages = max(1, min(pages, 10))
+        
+        student_name = data.get('student_name', '')
+        student_id = data.get('student_id', '')
+        class_name = data.get('class_name', '')
+        
+        import tempfile
+        with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as tmp:
+            output_path = tmp.name
+        
+        try:
+            generator = CopybookGenerator(
+                grid_type=grid_type_code,
+                font_style=font_style,
+                student_name=student_name,
+                student_id=student_id,
+                class_name=class_name
+            )
+            
+            success, message = generator.generate(character, output_path, pages)
+            
+            if not success:
+                os.unlink(output_path)
+                return jsonify({
+                    'success': False,
+                    'error': message
+                }), 500
+            
+            with open(output_path, 'rb') as f:
+                pdf_data = f.read()
+            
+            os.unlink(output_path)
+            
+            filename = f"{character}_字帖.pdf"
+            encoded_filename = urllib.parse.quote(filename)
+            
+            response = make_response(pdf_data)
+            response.headers['Content-Type'] = 'application/pdf'
+            response.headers['Content-Disposition'] = f"attachment; filename*=UTF-8''{encoded_filename}"
+            
+            return response
+            
+        except Exception as e:
+            if os.path.exists(output_path):
+                os.unlink(output_path)
+            raise e
+            
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
 @app.route('/api/health', methods=['GET'])
 def health_check():
     """
@@ -383,6 +485,7 @@ if __name__ == '__main__':
     print(f"  POST   /api/templates          创建/更新模版")
     print(f"  PUT    /api/templates/<id>     更新模版")
     print(f"  DELETE /api/templates/<id>     删除模版")
+    print(f"  POST   /api/export/pdf         导出PDF字帖")
     print(f"  GET    /api/health             健康检查")
     print(f"=" * 50)
     

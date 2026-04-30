@@ -1036,7 +1036,10 @@ class CopybookGenerator:
                  font_size: int = 48,
                  font_path: Optional[str] = None,
                  grid_type: str = "mizi",
-                 font_style: str = "zhenkai"):
+                 font_style: str = "zhenkai",
+                 student_name: str = "",
+                 student_id: str = "",
+                 class_name: str = ""):
         """
         初始化字帖生成器
         
@@ -1048,6 +1051,9 @@ class CopybookGenerator:
             font_path: 字体文件路径，默认使用系统字体
             grid_type: 格子类型，"mizi" 表示米字格（默认），"tianzi" 表示田字格
             font_style: 字体样式，"zhenkai" 表示正楷（默认），"xingkai" 表示行楷
+            student_name: 学生姓名
+            student_id: 学号
+            class_name: 班级
         """
         self.paper_width, self.paper_height = paper_size
         self.grid_cols = grid_cols
@@ -1057,9 +1063,13 @@ class CopybookGenerator:
         self.grid_type = grid_type
         self.font_style = font_style
         
+        self.student_name = student_name
+        self.student_id = student_id
+        self.class_name = class_name
+        
         self.margin_left = 20 * mm
         self.margin_right = 20 * mm
-        self.margin_top = 30 * mm
+        self.margin_top = 40 * mm
         self.margin_bottom = 20 * mm
         
         self._init_font(font_path)
@@ -2280,6 +2290,33 @@ class CopybookGenerator:
             c.line(x, y, x + grid_size, y + grid_size)
             c.line(x + grid_size, y, x, y + grid_size)
     
+    def _draw_header(self, c: canvas.Canvas):
+        """
+        绘制页眉（学生信息）
+        
+        Args:
+            c: PDF画布对象
+        """
+        header_y = self.paper_height - 15 * mm
+        
+        info_items = []
+        if self.student_name:
+            info_items.append(f"姓名：{self.student_name}")
+        if self.class_name:
+            info_items.append(f"班级：{self.class_name}")
+        if self.student_id:
+            info_items.append(f"学号：{self.student_id}")
+        
+        if info_items:
+            c.setFont(self.font_name, 12)
+            c.setFillColor(black)
+            
+            x = self.margin_left
+            for item in info_items:
+                c.drawString(x, header_y, item)
+                text_width = c.stringWidth(item, self.font_name, 12)
+                x += text_width + 30 * mm
+    
     def _draw_page(self, c: canvas.Canvas, character: str, page_num: int):
         """
         绘制单页字帖
@@ -2289,6 +2326,8 @@ class CopybookGenerator:
             character: 汉字
             page_num: 页码
         """
+        self._draw_header(c)
+        
         for row in range(self.grid_rows):
             for col in range(self.grid_cols):
                 x = self.margin_left + self.grid_padding + col * self.grid_size
