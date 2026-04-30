@@ -25,6 +25,7 @@ function CopybookEditor({ config, onConfigChange }) {
   const [selectedTemplateId, setSelectedTemplateId] = useState('')
   const [loadingTemplates, setLoadingTemplates] = useState(false)
 
+  const isApplyingTemplate = useRef(false)
   const gridSize = 60
 
   const fetchTemplates = useCallback(async () => {
@@ -44,7 +45,7 @@ function CopybookEditor({ config, onConfigChange }) {
   }, [fetchTemplates])
 
   useEffect(() => {
-    if (config) {
+    if (config && !isApplyingTemplate.current) {
       setInputText(config.input_text || '')
       setGridType(config.grid_type || GridType.TIANZI)
       setFontStyle(config.font_style || 'zhenkai')
@@ -60,15 +61,18 @@ function CopybookEditor({ config, onConfigChange }) {
 
     const template = templates.find((t) => t.template_id === templateId)
     if (template && template.config_data) {
+      isApplyingTemplate.current = true
       const configData = template.config_data
       setGridType(configData.grid_type || GridType.TIANZI)
       setFontStyle(configData.font_style || 'zhenkai')
       setStudentName(configData.student_name || '')
       setStudentId(configData.student_id || '')
       setClassName(configData.class_name || '')
-      if (configData.input_text) {
-        setInputText(configData.input_text)
-      }
+      setInputText(configData.input_text || '')
+
+      setTimeout(() => {
+        isApplyingTemplate.current = false
+      }, 100)
     }
   }, [templates])
 
@@ -281,12 +285,14 @@ function CopybookEditor({ config, onConfigChange }) {
           student_name: studentName,
           student_id: studentId,
           class_name: className,
+          input_text: inputText,
         },
       }
       await templateApi.create(templateData)
       setNewTemplateName('')
       setShowSaveDialog(false)
       alert('模版保存成功')
+      fetchTemplates()
     } catch (err) {
       alert(`保存失败: ${err.message}`)
     } finally {
