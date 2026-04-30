@@ -12,6 +12,7 @@ function CopybookEditor({ config, onConfigChange }) {
   const canvasRef = useRef(null)
   const [inputText, setInputText] = useState(config.input_text || '')
   const [gridType, setGridType] = useState(config.grid_type || GridType.TIANZI)
+  const [fontStyle, setFontStyle] = useState(config.font_style || 'zhenkai')
   const [studentName, setStudentName] = useState(config.student_name || '')
   const [studentId, setStudentId] = useState(config.student_id || '')
   const [className, setClassName] = useState(config.class_name || '')
@@ -20,7 +21,6 @@ function CopybookEditor({ config, onConfigChange }) {
   const [saving, setSaving] = useState(false)
   const [showExportDialog, setShowExportDialog] = useState(false)
   const [exportCharacter, setExportCharacter] = useState('')
-  const [exportFontStyle, setExportFontStyle] = useState('zhenkai')
   const [exportPages, setExportPages] = useState(1)
   const [exporting, setExporting] = useState(false)
 
@@ -30,6 +30,7 @@ function CopybookEditor({ config, onConfigChange }) {
     if (config) {
       setInputText(config.input_text || '')
       setGridType(config.grid_type || GridType.TIANZI)
+      setFontStyle(config.font_style || 'zhenkai')
       setStudentName(config.student_name || '')
       setStudentId(config.student_id || '')
       setClassName(config.class_name || '')
@@ -41,6 +42,7 @@ function CopybookEditor({ config, onConfigChange }) {
       input_text: inputText,
       grid_type: gridType,
       grid_size: gridSize,
+      font_style: fontStyle,
       student_name: studentName,
       student_id: studentId,
       class_name: className,
@@ -48,7 +50,7 @@ function CopybookEditor({ config, onConfigChange }) {
     if (onConfigChange) {
       onConfigChange(newConfig)
     }
-  }, [inputText, gridType, studentName, studentId, className, onConfigChange])
+  }, [inputText, gridType, fontStyle, studentName, studentId, className, onConfigChange])
 
   const drawGrid = useCallback((ctx, x, y, size, type, character = '', isTemplate = false) => {
     if (isTemplate && character) {
@@ -215,8 +217,8 @@ function CopybookEditor({ config, onConfigChange }) {
       const templateData = {
         template_name: newTemplateName.trim(),
         config_data: {
-          input_text: inputText,
           grid_type: gridType,
+          font_style: fontStyle,
           grid_size: gridSize,
           student_name: studentName,
           student_id: studentId,
@@ -254,7 +256,7 @@ function CopybookEditor({ config, onConfigChange }) {
       const exportData = {
         character: exportCharacter,
         grid_type: gridType,
-        font_style: exportFontStyle,
+        font_style: fontStyle,
         pages: exportPages,
         student_name: studentName,
         student_id: studentId,
@@ -348,6 +350,24 @@ function CopybookEditor({ config, onConfigChange }) {
                   onChange={(e) => setGridType(e.target.value)}
                 />
                 <span>{type.label}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+
+        <div className="section">
+          <h3 className="section-title">字体样式</h3>
+          <div className="radio-group">
+            {fontStyles.map((style) => (
+              <label key={style.value} className="radio-label">
+                <input
+                  type="radio"
+                  name="fontStyle"
+                  value={style.value}
+                  checked={fontStyle === style.value}
+                  onChange={(e) => setFontStyle(e.target.value)}
+                />
+                <span>{style.label}</span>
               </label>
             ))}
           </div>
@@ -448,24 +468,6 @@ function CopybookEditor({ config, onConfigChange }) {
                     </option>
                   ))}
                 </select>
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">字体样式</label>
-                <div className="radio-group">
-                  {fontStyles.map((style) => (
-                    <label key={style.value} className="radio-label">
-                      <input
-                        type="radio"
-                        name="exportFontStyle"
-                        value={style.value}
-                        checked={exportFontStyle === style.value}
-                        onChange={(e) => setExportFontStyle(e.target.value)}
-                      />
-                      <span>{style.label}</span>
-                    </label>
-                  ))}
-                </div>
               </div>
 
               <div className="form-group">

@@ -35,9 +35,10 @@ function TemplateManager({ onApplyTemplate, currentConfig }) {
 
     setSaving(true)
     try {
+      const { input_text, ...templateConfig } = currentConfig
       const templateData = {
         template_name: newTemplateName.trim(),
-        config_data: currentConfig,
+        config_data: templateConfig,
       }
       await templateApi.create(templateData)
       setNewTemplateName('')
@@ -171,11 +172,33 @@ function TemplateManager({ onApplyTemplate, currentConfig }) {
                         {template.config_data?.grid_type || '田字格'}
                       </span>
                     </div>
-                    {template.config_data?.input_text && (
-                      <div className="config-item config-full">
-                        <span className="config-label">输入文字:</span>
-                        <span className="config-value config-text">
-                          {template.config_data.input_text}
+                    <div className="config-item">
+                      <span className="config-label">字体样式:</span>
+                      <span className="config-value">
+                        {template.config_data?.font_style === 'xingkai' ? '行楷' : '正楷'}
+                      </span>
+                    </div>
+                    {template.config_data?.student_name && (
+                      <div className="config-item">
+                        <span className="config-label">姓名:</span>
+                        <span className="config-value">
+                          {template.config_data.student_name}
+                        </span>
+                      </div>
+                    )}
+                    {template.config_data?.student_id && (
+                      <div className="config-item">
+                        <span className="config-label">学号:</span>
+                        <span className="config-value">
+                          {template.config_data.student_id}
+                        </span>
+                      </div>
+                    )}
+                    {template.config_data?.class_name && (
+                      <div className="config-item">
+                        <span className="config-label">班级:</span>
+                        <span className="config-value">
+                          {template.config_data.class_name}
                         </span>
                       </div>
                     )}
