@@ -171,24 +171,6 @@ function TemplateManager({ onApplyTemplate, currentConfig }) {
                         {template.config_data?.grid_type || '田字格'}
                       </span>
                     </div>
-                    <div className="config-item">
-                      <span className="config-label">姓名:</span>
-                      <span className="config-value">
-                        {template.config_data?.student_name || '-'}
-                      </span>
-                    </div>
-                    <div className="config-item">
-                      <span className="config-label">学号:</span>
-                      <span className="config-value">
-                        {template.config_data?.student_id || '-'}
-                      </span>
-                    </div>
-                    <div className="config-item">
-                      <span className="config-label">班级:</span>
-                      <span className="config-value">
-                        {template.config_data?.class_name || '-'}
-                      </span>
-                    </div>
                     {template.config_data?.input_text && (
                       <div className="config-item config-full">
                         <span className="config-label">输入文字:</span>
