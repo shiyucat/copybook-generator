@@ -8,6 +8,7 @@ Flask 后端 API
 
 import os
 import json
+import urllib.parse
 from datetime import datetime
 from flask import Flask, jsonify, request, make_response
 from flask_cors import CORS
@@ -366,9 +367,6 @@ def internal_error(error):
         'success': False,
         'error': '服务器内部错误'
     }), 500
-
-
-import urllib.parse
 
 
 if __name__ == '__main__':
