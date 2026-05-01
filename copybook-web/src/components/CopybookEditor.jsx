@@ -265,39 +265,64 @@ function CopybookEditor({ config, onConfigChange }) {
       return { charIndex: 0, linesOffset: 0, totalPages: 1 }
     }
 
-    let currentPage = 0
-    let charIndex = 0
-    let linesOffset = 0
-
-    while (currentPage < pageNumber && charIndex < validCharsArr.length) {
-      const linesRemainingForChar = linesPerCharParam - linesOffset
-      if (linesRemainingForChar <= maxRowsParam) {
-        charIndex++
-        linesOffset = 0
-      } else {
-        linesOffset += maxRowsParam
-      }
-      currentPage++
-    }
-
     let totalPages = 0
     let tempCharIndex = 0
     let tempLinesOffset = 0
+    let tempLinesOnPage = 0
+
     while (tempCharIndex < validCharsArr.length) {
       const linesRemainingForChar = linesPerCharParam - tempLinesOffset
-      if (linesRemainingForChar <= maxRowsParam) {
+      const availableLines = maxRowsParam - tempLinesOnPage
+
+      if (linesRemainingForChar <= availableLines) {
+        tempLinesOnPage += linesRemainingForChar
         tempCharIndex++
         tempLinesOffset = 0
+
+        if (tempLinesOnPage >= maxRowsParam || tempCharIndex >= validCharsArr.length) {
+          totalPages++
+          tempLinesOnPage = 0
+        }
       } else {
-        tempLinesOffset += maxRowsParam
+        tempLinesOnPage = maxRowsParam
+        tempLinesOffset += availableLines
+        totalPages++
+        tempLinesOnPage = 0
       }
-      totalPages++
+    }
+
+    totalPages = Math.max(1, totalPages)
+
+    let currentPage = 0
+    let charIndex = 0
+    let linesOffset = 0
+    let linesOnPage = 0
+
+    while (currentPage < pageNumber && charIndex < validCharsArr.length) {
+      const linesRemainingForChar = linesPerCharParam - linesOffset
+      const availableLines = maxRowsParam - linesOnPage
+
+      if (linesRemainingForChar <= availableLines) {
+        linesOnPage += linesRemainingForChar
+        charIndex++
+        linesOffset = 0
+
+        if (linesOnPage >= maxRowsParam) {
+          currentPage++
+          linesOnPage = 0
+        }
+      } else {
+        linesOnPage = maxRowsParam
+        linesOffset += availableLines
+        currentPage++
+        linesOnPage = 0
+      }
     }
 
     return {
       charIndex: Math.min(charIndex, validCharsArr.length - 1),
       linesOffset,
-      totalPages: Math.max(1, totalPages),
+      totalPages,
     }
   }, [])
 
