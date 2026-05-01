@@ -9,6 +9,22 @@ export const templateApi = {
     return data.data || []
   },
 
+  async getPaginated(page = 1, pageSize = 10) {
+    const response = await fetch(`${API_BASE}/templates?page=${page}&page_size=${pageSize}`)
+    if (!response.ok) throw new Error('获取模版列表失败')
+    const data = await response.json()
+    if (!data.success) throw new Error(data.error || '获取模版列表失败')
+    return {
+      data: data.data || [],
+      pagination: data.pagination || {
+        page: 1,
+        page_size: pageSize,
+        total: data.data?.length || 0,
+        total_pages: 1
+      }
+    }
+  },
+
   async getById(id) {
     const response = await fetch(`${API_BASE}/templates/${id}`)
     if (!response.ok) throw new Error('获取模版失败')

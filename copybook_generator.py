@@ -2712,18 +2712,20 @@ class CopybookGenerator:
         c.drawString(header_x, header_y, info_text)
     
     def _draw_page_from_chars(self, c: canvas.Canvas, characters: List[str], 
-                               start_char_index: int, page_num: int) -> int:
+                               start_char_index: int, lines_rendered_for_char: int,
+                               page_num: int) -> Tuple[int, int]:
         """
-        从字符列表绘制单页字帖
+        从字符列表绘制单页字帖（支持单字跨多页）
         
         Args:
             c: PDF画布对象
             characters: 字符列表
             start_char_index: 起始字符索引
+            lines_rendered_for_char: 当前字符已渲染的行数
             page_num: 页码
             
         Returns:
-            下一页起始字符索引
+            (下一页起始字符索引, 下一页当前字符已渲染的行数)
         """
         self._draw_header(c)
         
@@ -2742,13 +2744,17 @@ class CopybookGenerator:
         
         row_index = 0
         char_index = start_char_index
+        current_lines_rendered = lines_rendered_for_char
         total_chars = len(characters)
         
         while char_index < total_chars and row_index < self.grid_rows:
             current_char = characters[char_index]
             char_pinyin = pinyin_cache.get(current_char, "")
             
-            for line_repeat in range(self.lines_per_char):
+            lines_remaining_for_char = self.lines_per_char - current_lines_rendered
+            lines_to_render_this_page = min(lines_remaining_for_char, self.grid_rows - row_index)
+            
+            for line_repeat in range(lines_to_render_this_page):
                 if row_index >= self.grid_rows:
                     break
                 
@@ -2765,27 +2771,29 @@ class CopybookGenerator:
                                    pinyin_text=char_pinyin if is_template else "")
                 
                 row_index += 1
+                current_lines_rendered += 1
             
-            char_index += 1
+            if current_lines_rendered >= self.lines_per_char:
+                char_index += 1
+                current_lines_rendered = 0
         
-        if char_index >= total_chars:
-            while row_index < self.grid_rows:
-                for col in range(self.grid_cols):
-                    x = self.margin_left + self.grid_padding + col * self.grid_size
-                    y = self.paper_height - self.margin_top - (row_index + 1) * self.grid_size
-                    self._draw_grid(c, x, y)
-                row_index += 1
+        while row_index < self.grid_rows:
+            for col in range(self.grid_cols):
+                x = self.margin_left + self.grid_padding + col * self.grid_size
+                y = self.paper_height - self.margin_top - (row_index + 1) * self.grid_size
+                self._draw_grid(c, x, y)
+            row_index += 1
         
         c.setFont("Helvetica", 10)
         c.setFillColor(gray)
         footer_text = f"第 {page_num} 页"
         c.drawString(self.margin_left, 10 * mm, footer_text)
         
-        return char_index
+        return char_index, current_lines_rendered
     
     def generate_from_chars(self, characters: List[str], output_path: str) -> Tuple[bool, str]:
         """
-        从字符列表生成字帖
+        从字符列表生成字帖（支持单字跨多页）
         
         Args:
             characters: 要生成的字符列表
@@ -2801,11 +2809,14 @@ class CopybookGenerator:
             c = canvas.Canvas(output_path, pagesize=(self.paper_width, self.paper_height))
             
             char_index = 0
+            lines_rendered_for_char = 0
             page_num = 1
             total_chars = len(characters)
             
             while char_index < total_chars:
-                char_index = self._draw_page_from_chars(c, characters, char_index, page_num)
+                char_index, lines_rendered_for_char = self._draw_page_from_chars(
+                    c, characters, char_index, lines_rendered_for_char, page_num
+                )
                 c.showPage()
                 page_num += 1
             

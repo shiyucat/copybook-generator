@@ -97,7 +97,9 @@ function CopybookEditor({ config, onConfigChange }) {
       setGridColor(/^#[0-9A-Fa-f]{6}$/.test(config.grid_color) ? config.grid_color : DEFAULT_GRID_COLOR)
       setGridSizeCm(config.grid_size_cm ?? DEFAULT_GRID_SIZE_CM)
       setLinesPerChar(
-        config.lines_per_char ? Math.max(1, Math.min(50, parseInt(config.lines_per_char, 10))) : DEFAULT_LINES_PER_CHAR
+        config.lines_per_char != null 
+          ? Math.max(1, Math.min(50, parseInt(config.lines_per_char, 10))) 
+          : DEFAULT_LINES_PER_CHAR
       )
       setShowPinyin(config.show_pinyin ?? DEFAULT_SHOW_PINYIN)
       setFontStyle(config.font_style ?? 'zhenkai')
@@ -120,7 +122,9 @@ function CopybookEditor({ config, onConfigChange }) {
       setGridColor(/^#[0-9A-Fa-f]{6}$/.test(configData.grid_color) ? configData.grid_color : DEFAULT_GRID_COLOR)
       setGridSizeCm(configData.grid_size_cm ?? DEFAULT_GRID_SIZE_CM)
       setLinesPerChar(
-        configData.lines_per_char ? Math.max(1, Math.min(50, parseInt(configData.lines_per_char, 10))) : DEFAULT_LINES_PER_CHAR
+        configData.lines_per_char != null 
+          ? Math.max(1, Math.min(50, parseInt(configData.lines_per_char, 10))) 
+          : DEFAULT_LINES_PER_CHAR
       )
       setShowPinyin(configData.show_pinyin ?? DEFAULT_SHOW_PINYIN)
       setFontStyle(configData.font_style ?? 'zhenkai')
@@ -256,14 +260,55 @@ function CopybookEditor({ config, onConfigChange }) {
       })
   }, [inputText])
 
+  const calculatePageInfo = useCallback((pageNumber, validCharsArr, maxRowsParam, linesPerCharParam) => {
+    if (validCharsArr.length === 0) {
+      return { charIndex: 0, linesOffset: 0, totalPages: 1 }
+    }
+
+    let currentPage = 0
+    let charIndex = 0
+    let linesOffset = 0
+
+    while (currentPage < pageNumber && charIndex < validCharsArr.length) {
+      const linesRemainingForChar = linesPerCharParam - linesOffset
+      if (linesRemainingForChar <= maxRowsParam) {
+        charIndex++
+        linesOffset = 0
+      } else {
+        linesOffset += maxRowsParam
+      }
+      currentPage++
+    }
+
+    let totalPages = 0
+    let tempCharIndex = 0
+    let tempLinesOffset = 0
+    while (tempCharIndex < validCharsArr.length) {
+      const linesRemainingForChar = linesPerCharParam - tempLinesOffset
+      if (linesRemainingForChar <= maxRowsParam) {
+        tempCharIndex++
+        tempLinesOffset = 0
+      } else {
+        tempLinesOffset += maxRowsParam
+      }
+      totalPages++
+    }
+
+    return {
+      charIndex: Math.min(charIndex, validCharsArr.length - 1),
+      linesOffset,
+      totalPages: Math.max(1, totalPages),
+    }
+  }, [])
+
   const totalPages = useMemo(() => {
     const currentPageSize = PageSize[pageSize] || PageSize.A4
     const usableHeightMm = currentPageSize.height - PRINT_CONFIG.MARGIN_TOP_MM - PRINT_CONFIG.MARGIN_BOTTOM_MM
     const cellSizeMm = gridSizeCm * 10
     const maxRows = Math.max(1, Math.floor(usableHeightMm / cellSizeMm))
-    const charsPerPage = Math.max(1, Math.floor(maxRows / linesPerChar))
-    return validChars.length === 0 ? 1 : Math.ceil(validChars.length / charsPerPage)
-  }, [validChars, pageSize, gridSizeCm, linesPerChar])
+    
+    return calculatePageInfo(0, validChars, maxRows, linesPerChar).totalPages
+  }, [validChars, pageSize, gridSizeCm, linesPerChar, calculatePageInfo])
 
   useEffect(() => {
     if (!showPinyin || validChars.length === 0) {
@@ -383,20 +428,19 @@ function CopybookEditor({ config, onConfigChange }) {
       return
     }
 
-    const charsPerPage = Math.max(1, Math.floor(maxRows / linesPerChar))
-    const totalPages = Math.ceil(validChars.length / charsPerPage)
-    const pageToShow = Math.min(currentPage, Math.max(0, totalPages - 1))
-
-    const startCharIndex = pageToShow * charsPerPage
-    const endCharIndex = Math.min(startCharIndex + charsPerPage, validChars.length)
-
+    const pageInfo = calculatePageInfo(currentPage, validChars, maxRows, linesPerChar)
+    let charIndex = pageInfo.charIndex
+    let linesOffset = pageInfo.linesOffset
     let rowIndex = 0
 
-    for (let charIndex = startCharIndex; charIndex < endCharIndex && rowIndex < maxRows; charIndex++) {
+    while (charIndex < validChars.length && rowIndex < maxRows) {
       const currentChar = validChars[charIndex]
       const charPinyin = pinyinData[currentChar] || ''
 
-      for (let lineRepeat = 0; lineRepeat < linesPerChar && rowIndex < maxRows; lineRepeat++) {
+      const linesRemainingForChar = linesPerChar - linesOffset
+      const linesToRenderThisPage = Math.min(linesRemainingForChar, maxRows - rowIndex)
+
+      for (let lineRepeat = 0; lineRepeat < linesToRenderThisPage; lineRepeat++) {
         for (let col = 0; col < cols; col++) {
           const x = offsetX + previewMarginLeft + previewGridPadding + col * previewCellSize
           const y = offsetY + mmToPx(marginTopMm + rowIndex * cellSizeMm)
@@ -407,24 +451,32 @@ function CopybookEditor({ config, onConfigChange }) {
           drawGrid(ctx, x, y, previewCellSize, gridType, gridColor, charToDraw, isTemplate, charPinyin, showPinyin)
         }
         rowIndex++
+        linesOffset++
+      }
+
+      if (linesOffset >= linesPerChar) {
+        charIndex++
+        linesOffset = 0
       }
     }
 
+    while (rowIndex < maxRows) {
+      for (let col = 0; col < cols; col++) {
+        const x = offsetX + previewMarginLeft + previewGridPadding + col * previewCellSize
+        const y = offsetY + mmToPx(marginTopMm + rowIndex * cellSizeMm)
+        drawGrid(ctx, x, y, previewCellSize, gridType, gridColor)
+      }
+      rowIndex++
+    }
+
     ctx.restore()
-  }, [validChars, gridType, gridColor, drawGrid, pageSize, studentName, studentId, className, gridSizeCm, linesPerChar, currentPage, pinyinData, showPinyin])
+  }, [validChars, gridType, gridColor, drawGrid, pageSize, studentName, studentId, className, gridSizeCm, linesPerChar, currentPage, pinyinData, showPinyin, calculatePageInfo])
 
   useEffect(() => {
-    const currentPageSize = PageSize[pageSize] || PageSize.A4
-    const usableHeightMm = currentPageSize.height - PRINT_CONFIG.MARGIN_TOP_MM - PRINT_CONFIG.MARGIN_BOTTOM_MM
-    const cellSizeMm = gridSizeCm * 10
-    const maxRows = Math.max(1, Math.floor(usableHeightMm / cellSizeMm))
-    const charsPerPage = Math.max(1, Math.floor(maxRows / linesPerChar))
-    const totalPages = Math.ceil(validChars.length / charsPerPage)
-    
     if (currentPage >= totalPages && totalPages > 0) {
       setCurrentPage(Math.max(0, totalPages - 1))
     }
-  }, [validChars, gridSizeCm, linesPerChar, pageSize, currentPage])
+  }, [validChars, totalPages, currentPage])
 
   useEffect(() => {
     generatePreview()
