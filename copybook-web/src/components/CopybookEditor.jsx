@@ -68,6 +68,7 @@ function CopybookEditor({ config, onConfigChange }) {
   const [templates, setTemplates] = useState([])
   const [selectedTemplateId, setSelectedTemplateId] = useState('')
   const [loadingTemplates, setLoadingTemplates] = useState(false)
+  const [currentPage, setCurrentPage] = useState(0)
 
   const gridSize = 60
 
@@ -242,6 +243,15 @@ function CopybookEditor({ config, onConfigChange }) {
       })
   }, [inputText])
 
+  const totalPages = useMemo(() => {
+    const currentPageSize = PageSize[pageSize] || PageSize.A4
+    const usableHeightMm = currentPageSize.height - PRINT_CONFIG.MARGIN_TOP_MM - PRINT_CONFIG.MARGIN_BOTTOM_MM
+    const cellSizeMm = gridSizeCm * 10
+    const maxRows = Math.max(1, Math.floor(usableHeightMm / cellSizeMm))
+    const charsPerPage = Math.floor(maxRows / linesPerChar)
+    return validChars.length === 0 ? 1 : Math.ceil(validChars.length / charsPerPage)
+  }, [validChars, pageSize, gridSizeCm, linesPerChar])
+
   const generatePreview = useCallback(() => {
     const canvas = canvasRef.current
     if (!canvas) return
@@ -336,11 +346,16 @@ function CopybookEditor({ config, onConfigChange }) {
       return
     }
 
-    let rowIndex = 0
-    let charIndex = 0
-    const totalChars = validChars.length
+    const charsPerPage = Math.floor(maxRows / linesPerChar)
+    const totalPages = Math.ceil(validChars.length / charsPerPage)
+    const pageToShow = Math.min(currentPage, Math.max(0, totalPages - 1))
 
-    while (charIndex < totalChars && rowIndex < maxRows) {
+    const startCharIndex = pageToShow * charsPerPage
+    const endCharIndex = Math.min(startCharIndex + charsPerPage, validChars.length)
+
+    let rowIndex = 0
+
+    for (let charIndex = startCharIndex; charIndex < endCharIndex && rowIndex < maxRows; charIndex++) {
       const currentChar = validChars[charIndex]
 
       for (let lineRepeat = 0; lineRepeat < linesPerChar && rowIndex < maxRows; lineRepeat++) {
@@ -355,12 +370,23 @@ function CopybookEditor({ config, onConfigChange }) {
         }
         rowIndex++
       }
-
-      charIndex++
     }
 
     ctx.restore()
-  }, [validChars, gridType, gridColor, drawGrid, pageSize, studentName, studentId, className, gridSizeCm, linesPerChar])
+  }, [validChars, gridType, gridColor, drawGrid, pageSize, studentName, studentId, className, gridSizeCm, linesPerChar, currentPage])
+
+  useEffect(() => {
+    const currentPageSize = PageSize[pageSize] || PageSize.A4
+    const usableHeightMm = currentPageSize.height - PRINT_CONFIG.MARGIN_TOP_MM - PRINT_CONFIG.MARGIN_BOTTOM_MM
+    const cellSizeMm = gridSizeCm * 10
+    const maxRows = Math.max(1, Math.floor(usableHeightMm / cellSizeMm))
+    const charsPerPage = Math.floor(maxRows / linesPerChar)
+    const totalPages = Math.ceil(validChars.length / charsPerPage)
+    
+    if (currentPage >= totalPages && totalPages > 0) {
+      setCurrentPage(Math.max(0, totalPages - 1))
+    }
+  }, [validChars, gridSizeCm, linesPerChar, pageSize, currentPage])
 
   useEffect(() => {
     generatePreview()
@@ -581,21 +607,17 @@ function CopybookEditor({ config, onConfigChange }) {
 
           <h3 className="section-title" style={{ marginTop: '16px' }}>格子大小</h3>
           <div className="form-group">
-            <div className="radio-group">
+            <select
+              className="form-select"
+              value={gridSizeCm}
+              onChange={(e) => setGridSizeCm(parseFloat(e.target.value))}
+            >
               {GridSizeOptions.map((option) => (
-                <label key={option.value} className="radio-label">
-                  <input
-                    type="radio"
-                    name="gridSize"
-                    value={option.value}
-                    checked={gridSizeCm === option.value}
-                    onChange={(e) => setGridSizeCm(parseFloat(e.target.value))}
-                    className="radio-input"
-                  />
-                  <span className="radio-text">{option.label}</span>
-                </label>
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
               ))}
-            </div>
+            </select>
           </div>
 
           <h3 className="section-title" style={{ marginTop: '16px' }}>每个字的行数</h3>
@@ -717,8 +739,37 @@ function CopybookEditor({ config, onConfigChange }) {
       </div>
 
       <div className="editor-right">
-        <div className="preview-header">
+        <div className="preview-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <h3 className="section-title">预览</h3>
+          <div className="pagination-controls" style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px' }}>
+            <button
+              className="pagination-btn"
+              onClick={() => setCurrentPage(Math.max(0, currentPage - 1))}
+              disabled={currentPage === 0}
+              style={{ 
+                padding: '4px 8px', 
+                fontSize: '12px', 
+                cursor: currentPage === 0 ? 'not-allowed' : 'pointer',
+                opacity: currentPage === 0 ? 0.5 : 1
+              }}
+            >
+              上一页
+            </button>
+            <span>第 {currentPage + 1} 页 / 共 {totalPages} 页</span>
+            <button
+              className="pagination-btn"
+              onClick={() => setCurrentPage(Math.min(currentPage + 1, Math.max(0, totalPages - 1)))}
+              disabled={currentPage >= totalPages - 1 || totalPages <= 1}
+              style={{ 
+                padding: '4px 8px', 
+                fontSize: '12px',
+                cursor: currentPage >= totalPages - 1 || totalPages <= 1 ? 'not-allowed' : 'pointer',
+                opacity: currentPage >= totalPages - 1 || totalPages <= 1 ? 0.5 : 1
+              }}
+            >
+              下一页
+            </button>
+          </div>
         </div>
         <div className="preview-container">
           <canvas ref={canvasRef} className="preview-canvas" />
