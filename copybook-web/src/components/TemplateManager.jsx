@@ -173,6 +173,25 @@ function TemplateManager({ onApplyTemplate, currentConfig }) {
                       </span>
                     </div>
                     <div className="config-item">
+                      <span className="config-label">格子颜色:</span>
+                      <span className="config-value">
+                        <span
+                          className="color-swatch-small"
+                          style={{
+                            display: 'inline-block',
+                            width: '16px',
+                            height: '16px',
+                            borderRadius: '3px',
+                            backgroundColor: template.config_data?.grid_color || '#000000',
+                            marginRight: '6px',
+                            verticalAlign: 'middle',
+                            border: '1px solid #ddd',
+                          }}
+                        />
+                        {template.config_data?.grid_color || '#000000'}
+                      </span>
+                    </div>
+                    <div className="config-item">
                       <span className="config-label">字体样式:</span>
                       <span className="config-value">
                         {template.config_data?.font_style === 'xingkai' ? '行楷' : '正楷'}

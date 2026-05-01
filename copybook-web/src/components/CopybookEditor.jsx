@@ -8,10 +8,13 @@ const GridType = {
   FANGGE: '方格',
 }
 
+const DEFAULT_GRID_COLOR = '#000000'
+
 function CopybookEditor({ config, onConfigChange }) {
   const canvasRef = useRef(null)
   const [inputText, setInputText] = useState(config.input_text || '')
   const [gridType, setGridType] = useState(config.grid_type || GridType.TIANZI)
+  const [gridColor, setGridColor] = useState(config.grid_color || DEFAULT_GRID_COLOR)
   const [fontStyle, setFontStyle] = useState(config.font_style || 'zhenkai')
   const [studentName, setStudentName] = useState(config.student_name || '')
   const [studentId, setStudentId] = useState(config.student_id || '')
@@ -26,6 +29,12 @@ function CopybookEditor({ config, onConfigChange }) {
   const [loadingTemplates, setLoadingTemplates] = useState(false)
 
   const gridSize = 60
+
+  const presetColors = [
+    '#000000', '#333333', '#666666', '#999999',
+    '#dc3545', '#fd7e14', '#ffc107', '#28a745',
+    '#17a2b8', '#007bff', '#6f42c1', '#e83e8c',
+  ]
 
   const fetchTemplates = useCallback(async () => {
     setLoadingTemplates(true)
@@ -47,6 +56,7 @@ function CopybookEditor({ config, onConfigChange }) {
     if (config) {
       setInputText(config.input_text || '')
       setGridType(config.grid_type || GridType.TIANZI)
+      setGridColor(config.grid_color || DEFAULT_GRID_COLOR)
       setFontStyle(config.font_style || 'zhenkai')
       setStudentName(config.student_name || '')
       setStudentId(config.student_id || '')
@@ -62,11 +72,13 @@ function CopybookEditor({ config, onConfigChange }) {
     if (template && template.config_data) {
       const configData = template.config_data
       setGridType(configData.grid_type || GridType.TIANZI)
+      setGridColor(configData.grid_color || DEFAULT_GRID_COLOR)
       setFontStyle(configData.font_style || 'zhenkai')
       setStudentName(configData.student_name || '')
       setStudentId(configData.student_id || '')
       setClassName(configData.class_name || '')
       setInputText(configData.input_text || '')
+      alert('模版已应用')
     }
   }, [templates])
 
@@ -74,6 +86,7 @@ function CopybookEditor({ config, onConfigChange }) {
     const newConfig = {
       input_text: inputText,
       grid_type: gridType,
+      grid_color: gridColor,
       grid_size: gridSize,
       font_style: fontStyle,
       student_name: studentName,
@@ -83,19 +96,26 @@ function CopybookEditor({ config, onConfigChange }) {
     if (onConfigChange) {
       onConfigChange(newConfig)
     }
-  }, [inputText, gridType, fontStyle, studentName, studentId, className, onConfigChange])
+  }, [inputText, gridType, gridColor, fontStyle, studentName, studentId, className, onConfigChange])
 
-  const drawGrid = useCallback((ctx, x, y, size, type, character = '', isTemplate = false) => {
+  const hexToRgba = (hex, alpha) => {
+    const r = parseInt(hex.slice(1, 3), 16)
+    const g = parseInt(hex.slice(3, 5), 16)
+    const b = parseInt(hex.slice(5, 7), 16)
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`
+  }
+
+  const drawGrid = useCallback((ctx, x, y, size, type, color, character = '', isTemplate = false) => {
     if (isTemplate && character) {
       ctx.fillStyle = '#f5f5f5'
       ctx.fillRect(x, y, size, size)
     }
 
-    ctx.strokeStyle = '#808080'
+    ctx.strokeStyle = hexToRgba(color, 0.7)
     ctx.lineWidth = 1
     ctx.strokeRect(x, y, size, size)
 
-    ctx.strokeStyle = '#c8c8c8'
+    ctx.strokeStyle = hexToRgba(color, 0.4)
 
     if (type === GridType.TIANZI || type === GridType.MIZI) {
       ctx.beginPath()
@@ -139,6 +159,21 @@ function CopybookEditor({ config, onConfigChange }) {
       ctx.fillText(character, x + size / 2, y + size / 2)
     }
   }, [])
+
+  const invalidChars = useMemo(() => {
+    return (inputText || '')
+      .split('')
+      .filter((char) => {
+        if (
+          /^[\u4e00-\u9fff\u3400-\u4dbf]$/.test(char) ||
+          /^[a-zA-Z0-9]$/.test(char) ||
+          /^\s$/.test(char)
+        ) {
+          return false
+        }
+        return true
+      })
+  }, [inputText])
 
   const validChars = useMemo(() => {
     return (inputText || '')
@@ -201,7 +236,7 @@ function CopybookEditor({ config, onConfigChange }) {
           const x = padding + col * (size + gridPadding)
           const y = contentTopY + row * (size + gridPadding)
           if (x + size <= width && y + size <= height) {
-            drawGrid(ctx, x, y, size, gridType)
+            drawGrid(ctx, x, y, size, gridType, gridColor)
           }
         }
       }
@@ -217,7 +252,7 @@ function CopybookEditor({ config, onConfigChange }) {
 
       for (let col = 0; col < cols; col++) {
         const x = padding + col * (size + gridPadding)
-        const y = contentTopY + rowIndex * (size + gridPadding)
+        const y = contentTopY + row * (size + gridPadding)
 
         if (x + size > width || y + size > height) {
           continue
@@ -226,13 +261,13 @@ function CopybookEditor({ config, onConfigChange }) {
         const isTemplate = col === 0
         const charToDraw = isTemplate ? currentChar : ''
 
-        drawGrid(ctx, x, y, size, gridType, charToDraw, isTemplate)
+        drawGrid(ctx, x, y, size, gridType, gridColor, charToDraw, isTemplate)
       }
 
       charIndex++
       rowIndex++
     }
-  }, [validChars, gridType, drawGrid, gridSize, studentName, studentId, className])
+  }, [validChars, gridType, gridColor, drawGrid, gridSize, studentName, studentId, className])
 
   useEffect(() => {
     generatePreview()
@@ -274,6 +309,7 @@ function CopybookEditor({ config, onConfigChange }) {
         template_name: newTemplateName.trim(),
         config_data: {
           grid_type: gridType,
+          grid_color: gridColor,
           font_style: fontStyle,
           grid_size: gridSize,
           student_name: studentName,
@@ -313,6 +349,7 @@ function CopybookEditor({ config, onConfigChange }) {
       const exportData = {
         characters: validChars,
         grid_type: gridType,
+        grid_color: gridColor,
         font_style: fontStyle,
         student_name: studentName,
         student_id: studentId,
@@ -376,11 +413,14 @@ function CopybookEditor({ config, onConfigChange }) {
             placeholder="请输入文字（支持中文、英文、数字）"
             rows={6}
           />
-          <p className="input-hint">
-            支持：中文、英文、数字<br />
-            空格和换行不占格<br />
-            不支持：标点符号、特殊字符
-          </p>
+          {invalidChars.length > 0 && (
+            <p className="input-error">
+              输入包含不支持的字符：{invalidChars.slice(0, 5).join('、')}
+              {invalidChars.length > 5 && ' 等'}
+              <br />
+              仅支持：中文、英文、数字
+            </p>
+          )}
         </div>
 
         <div className="section">
@@ -436,6 +476,51 @@ function CopybookEditor({ config, onConfigChange }) {
                 </option>
               ))}
             </select>
+          </div>
+
+          <h3 className="section-title" style={{ marginTop: '16px' }}>格子颜色</h3>
+          <div className="form-group">
+            <div className="color-picker-container">
+              <div className="color-presets">
+                {presetColors.map((color) => (
+                  <button
+                    key={color}
+                    className={`color-swatch ${gridColor === color ? 'active' : ''}`}
+                    style={{ backgroundColor: color }}
+                    onClick={() => setGridColor(color)}
+                    title={color}
+                  />
+                ))}
+              </div>
+              <div className="color-custom">
+                <label className="form-label">自定义颜色</label>
+                <div className="color-input-row">
+                  <input
+                    type="color"
+                    className="color-picker-input"
+                    value={gridColor}
+                    onChange={(e) => setGridColor(e.target.value)}
+                  />
+                  <input
+                    type="text"
+                    className="form-input color-hex-input"
+                    value={gridColor}
+                    onChange={(e) => {
+                      const val = e.target.value
+                      if (/^#[0-9A-Fa-f]{0,6}$/.test(val)) {
+                        setGridColor(val.length === 7 ? val : gridColor)
+                      }
+                    }}
+                    onBlur={(e) => {
+                      const val = e.target.value
+                      if (/^#[0-9A-Fa-f]{6}$/.test(val)) {
+                        setGridColor(val)
+                      }
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -549,6 +634,19 @@ function CopybookEditor({ config, onConfigChange }) {
                   </p>
                   <p style={{ fontSize: '13px', margin: '4px 0' }}>
                     格子类型：<strong>{gridType}</strong>
+                  </p>
+                  <p style={{ fontSize: '13px', margin: '4px 0' }}>
+                    格子颜色：<span style={{
+                      display: 'inline-block',
+                      width: '14px',
+                      height: '14px',
+                      borderRadius: '2px',
+                      backgroundColor: gridColor,
+                      marginRight: '4px',
+                      marginLeft: '4px',
+                      verticalAlign: 'middle',
+                      border: '1px solid #ddd',
+                    }} /><strong>{gridColor}</strong>
                   </p>
                   <p style={{ fontSize: '13px', margin: '4px 0' }}>
                     字体样式：<strong>{fontStyle === 'xingkai' ? '行楷' : '正楷'}</strong>
