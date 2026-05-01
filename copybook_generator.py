@@ -45,6 +45,7 @@ DEFAULT_GRID_SIZE_CM = 2.0
 DEFAULT_LINES_PER_CHAR = 1
 DEFAULT_SHOW_PINYIN = False
 BORDER_RATIO = 0.1
+DEFAULT_FONT_COLOR = (0.0, 0.0, 0.0)
 
 try:
     from PIL import Image, ImageDraw, ImageFont
@@ -1373,6 +1374,7 @@ class CopybookGenerator:
                  font_path: Optional[str] = None,
                  grid_type: str = "mizi",
                  font_style: str = "zhenkai",
+                 font_color: Tuple[float, float, float] = DEFAULT_FONT_COLOR,
                  grid_size_cm: float = DEFAULT_GRID_SIZE_CM,
                  lines_per_char: int = DEFAULT_LINES_PER_CHAR,
                  show_pinyin: bool = DEFAULT_SHOW_PINYIN,
@@ -1390,6 +1392,7 @@ class CopybookGenerator:
             font_path: 字体文件路径，默认使用系统字体
             grid_type: 格子类型，"mizi" 表示米字格（默认），"tianzi" 表示田字格
             font_style: 字体样式，"zhenkai" 表示正楷（默认），"xingkai" 表示行楷
+            font_color: 字体颜色（RGB元组，值为0.0-1.0），默认黑色
             grid_size_cm: 格子大小（厘米），默认2.0cm
             lines_per_char: 每个字的行数，默认1行
             show_pinyin: 是否显示拼音，默认False
@@ -1404,6 +1407,7 @@ class CopybookGenerator:
         
         self.grid_type = grid_type
         self.font_style = font_style
+        self.font_color = font_color
         self.grid_size_cm = grid_size_cm
         self.lines_per_char = max(1, min(50, lines_per_char))
         self.show_pinyin = show_pinyin
@@ -2595,6 +2599,34 @@ class CopybookGenerator:
         p.circle(x, y, radius)
         c.drawPath(p, fill=1, stroke=0)
     
+    def _draw_dashed_line(self, c: canvas.Canvas, x1: float, y1: float, x2: float, y2: float, dash_length: float = 2):
+        """
+        绘制虚线
+        
+        Args:
+            c: PDF画布对象
+            x1, y1: 起点坐标
+            x2, y2: 终点坐标
+            dash_length: 虚线每段长度
+        """
+        dx = x2 - x1
+        dy = y2 - y1
+        length = math.sqrt(dx * dx + dy * dy)
+        dash_count = int(length / (dash_length * 2))
+        if dash_count < 1:
+            dash_count = 1
+        
+        actual_dash_length = length / (dash_count * 2)
+        
+        for i in range(dash_count):
+            start_ratio = (i * 2) / (dash_count * 2)
+            end_ratio = (i * 2 + 1) / (dash_count * 2)
+            start_x = x1 + dx * start_ratio
+            start_y = y1 + dy * start_ratio
+            end_x = x1 + dx * end_ratio
+            end_y = y1 + dy * end_ratio
+            c.line(start_x, start_y, end_x, end_y)
+    
     def _draw_grid(self, c: canvas.Canvas, x: float, y: float, 
                    is_stroke_demo: bool = False, 
                    is_highlight: bool = False, 
@@ -2614,63 +2646,121 @@ class CopybookGenerator:
         """
         grid_size = self.grid_size
         
-        char_font_size = int(grid_size * 0.7)
-        pinyin_font_size = int(grid_size * 0.18)
-        
-        char_offset = 0
-        if self.show_pinyin and is_stroke_demo and pinyin_text:
-            char_offset = int(grid_size * 0.12)
-        
         if character and (is_stroke_demo or is_highlight):
             c.setFillColor(Color(0.95, 0.95, 0.95))
             c.rect(x, y, grid_size, grid_size, fill=1, stroke=0)
-            
-            c.setFillColor(Color(0.7, 0.7, 0.7))
-            c.setFont(self.font_name, char_font_size)
-            
-            text_width = c.stringWidth(character, self.font_name, char_font_size)
-            text_x = x + (grid_size - text_width) / 2
-            text_y = y + (grid_size - char_font_size) / 2 + (char_font_size * 0.15) - char_offset
-            
-            c.drawString(text_x, text_y, character)
-        
-        if self.show_pinyin and is_stroke_demo and pinyin_text:
-            c.setFillColor(Color(0.4, 0.4, 0.4))
-            c.setFont(self.font_name, pinyin_font_size)
-            
-            pinyin_width = c.stringWidth(pinyin_text, self.font_name, pinyin_font_size)
-            pinyin_x = x + (grid_size - pinyin_width) / 2
-            pinyin_y = y + grid_size - pinyin_font_size - 2
-            
-            c.drawString(pinyin_x, pinyin_y, pinyin_text)
         
         c.setStrokeColor(gray)
         c.setLineWidth(1)
-        c.rect(x, y, grid_size, grid_size)
         
-        if self.grid_type == "tianzi":
-            c.setStrokeColor(Color(0.8, 0.8, 0.8))
+        if self.show_pinyin:
+            pinyin_grid_height = grid_size / 3
+            char_grid_height = grid_size - pinyin_grid_height
+            char_grid_y = y
+            
+            pinyin_grid_top = y + grid_size
+            pinyin_grid_bottom = y + char_grid_height
+            
+            c.rect(x, y, grid_size, grid_size)
+            
+            c.setStrokeColor(gray)
+            c.setLineWidth(1)
+            c.line(x, pinyin_grid_bottom, x + grid_size, pinyin_grid_bottom)
+            
+            line_1_y = pinyin_grid_top
+            line_2_y = pinyin_grid_top - pinyin_grid_height * 0.25
+            line_3_y = pinyin_grid_top - pinyin_grid_height * 0.75
+            line_4_y = pinyin_grid_bottom
+            
+            if is_stroke_demo and pinyin_text:
+                pinyin_font_size = int(pinyin_grid_height * 0.5)
+                c.setFillColor(Color(0.4, 0.4, 0.4))
+                c.setFont(self.font_name, pinyin_font_size)
+                
+                pinyin_width = c.stringWidth(pinyin_text, self.font_name, pinyin_font_size)
+                pinyin_x = x + (grid_size - pinyin_width) / 2
+                pinyin_y = line_2_y - (line_2_y - line_3_y) / 2 - pinyin_font_size / 2
+                
+                c.drawString(pinyin_x, pinyin_y, pinyin_text)
+            
+            c.setStrokeColor(Color(0.5, 0.5, 0.5))
             c.setLineWidth(0.5)
-            c.line(x, y + grid_size/2, x + grid_size, y + grid_size/2)
-            c.line(x + grid_size/2, y, x + grid_size/2, y + grid_size)
-        
-        elif self.grid_type == "mizi":
-            c.setStrokeColor(Color(0.8, 0.8, 0.8))
-            c.setLineWidth(0.5)
-            c.line(x, y + grid_size/2, x + grid_size, y + grid_size/2)
-            c.line(x + grid_size/2, y, x + grid_size/2, y + grid_size)
-            c.line(x, y, x + grid_size, y + grid_size)
-            c.line(x + grid_size, y, x, y + grid_size)
-        
-        elif self.grid_type == "huigong":
-            inner_margin = grid_size / 5
-            c.setStrokeColor(Color(0.8, 0.8, 0.8))
-            c.setLineWidth(0.5)
-            c.rect(x + inner_margin, y + inner_margin, 
-                   grid_size - inner_margin * 2, grid_size - inner_margin * 2)
-        
-        elif self.grid_type == "fangge":
-            pass
+            self._draw_dashed_line(c, x, line_2_y, x + grid_size, line_2_y, 2)
+            self._draw_dashed_line(c, x, line_3_y, x + grid_size, line_3_y, 2)
+            
+            char_font_size = int(char_grid_height * 0.7)
+            
+            if character and (is_stroke_demo or is_highlight):
+                c.setFillColor(Color(self.font_color[0], self.font_color[1], self.font_color[2]))
+                c.setFont(self.font_name, char_font_size)
+                
+                text_width = c.stringWidth(character, self.font_name, char_font_size)
+                text_x = x + (grid_size - text_width) / 2
+                text_y = char_grid_y + (char_grid_height - char_font_size) / 2 + (char_font_size * 0.15)
+                
+                c.drawString(text_x, text_y, character)
+            
+            if self.grid_type == "tianzi":
+                c.setStrokeColor(Color(0.8, 0.8, 0.8))
+                c.setLineWidth(0.5)
+                c.line(x, char_grid_y + char_grid_height / 2, x + grid_size, char_grid_y + char_grid_height / 2)
+                c.line(x + grid_size / 2, char_grid_y, x + grid_size / 2, char_grid_y + char_grid_height)
+            
+            elif self.grid_type == "mizi":
+                c.setStrokeColor(Color(0.8, 0.8, 0.8))
+                c.setLineWidth(0.5)
+                c.line(x, char_grid_y + char_grid_height / 2, x + grid_size, char_grid_y + char_grid_height / 2)
+                c.line(x + grid_size / 2, char_grid_y, x + grid_size / 2, char_grid_y + char_grid_height)
+                c.line(x, char_grid_y, x + grid_size, char_grid_y + char_grid_height)
+                c.line(x + grid_size, char_grid_y, x, char_grid_y + char_grid_height)
+            
+            elif self.grid_type == "huigong":
+                inner_margin = char_grid_height / 5
+                c.setStrokeColor(Color(0.8, 0.8, 0.8))
+                c.setLineWidth(0.5)
+                c.rect(x + inner_margin, char_grid_y + inner_margin, 
+                       grid_size - inner_margin * 2, char_grid_height - inner_margin * 2)
+            
+            elif self.grid_type == "fangge":
+                pass
+        else:
+            c.rect(x, y, grid_size, grid_size)
+            
+            char_font_size = int(grid_size * 0.7)
+            
+            if character and (is_stroke_demo or is_highlight):
+                c.setFillColor(Color(self.font_color[0], self.font_color[1], self.font_color[2]))
+                c.setFont(self.font_name, char_font_size)
+                
+                text_width = c.stringWidth(character, self.font_name, char_font_size)
+                text_x = x + (grid_size - text_width) / 2
+                text_y = y + (grid_size - char_font_size) / 2 + (char_font_size * 0.15)
+                
+                c.drawString(text_x, text_y, character)
+            
+            if self.grid_type == "tianzi":
+                c.setStrokeColor(Color(0.8, 0.8, 0.8))
+                c.setLineWidth(0.5)
+                c.line(x, y + grid_size / 2, x + grid_size, y + grid_size / 2)
+                c.line(x + grid_size / 2, y, x + grid_size / 2, y + grid_size)
+            
+            elif self.grid_type == "mizi":
+                c.setStrokeColor(Color(0.8, 0.8, 0.8))
+                c.setLineWidth(0.5)
+                c.line(x, y + grid_size / 2, x + grid_size, y + grid_size / 2)
+                c.line(x + grid_size / 2, y, x + grid_size / 2, y + grid_size)
+                c.line(x, y, x + grid_size, y + grid_size)
+                c.line(x + grid_size, y, x, y + grid_size)
+            
+            elif self.grid_type == "huigong":
+                inner_margin = grid_size / 5
+                c.setStrokeColor(Color(0.8, 0.8, 0.8))
+                c.setLineWidth(0.5)
+                c.rect(x + inner_margin, y + inner_margin, 
+                       grid_size - inner_margin * 2, grid_size - inner_margin * 2)
+            
+            elif self.grid_type == "fangge":
+                pass
     
     def _draw_header(self, c: canvas.Canvas):
         """

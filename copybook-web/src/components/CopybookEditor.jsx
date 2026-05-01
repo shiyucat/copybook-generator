@@ -9,6 +9,7 @@ const GridType = {
 }
 
 const DEFAULT_GRID_COLOR = '#000000'
+const DEFAULT_FONT_COLOR = '#000000'
 
 const PageSize = {
   A4: { name: 'A4', width: 210, height: 297 },
@@ -56,6 +57,9 @@ function CopybookEditor({ config, onConfigChange }) {
   )
   const [showPinyin, setShowPinyin] = useState(safeConfig.show_pinyin ?? DEFAULT_SHOW_PINYIN)
   const [fontStyle, setFontStyle] = useState(safeConfig.font_style ?? 'zhenkai')
+  const [fontColor, setFontColor] = useState(
+    /^#[0-9A-Fa-f]{6}$/.test(safeConfig.font_color) ? safeConfig.font_color : DEFAULT_FONT_COLOR
+  )
   const [studentName, setStudentName] = useState(String(safeConfig.student_name ?? ''))
   const [studentId, setStudentId] = useState(String(safeConfig.student_id ?? ''))
   const [className, setClassName] = useState(String(safeConfig.class_name ?? ''))
@@ -103,6 +107,7 @@ function CopybookEditor({ config, onConfigChange }) {
       )
       setShowPinyin(config.show_pinyin ?? DEFAULT_SHOW_PINYIN)
       setFontStyle(config.font_style ?? 'zhenkai')
+      setFontColor(/^#[0-9A-Fa-f]{6}$/.test(config.font_color) ? config.font_color : DEFAULT_FONT_COLOR)
       setStudentName(String(config.student_name ?? ''))
       setStudentId(String(config.student_id ?? ''))
       setClassName(String(config.class_name ?? ''))
@@ -128,6 +133,7 @@ function CopybookEditor({ config, onConfigChange }) {
       )
       setShowPinyin(configData.show_pinyin ?? DEFAULT_SHOW_PINYIN)
       setFontStyle(configData.font_style ?? 'zhenkai')
+      setFontColor(/^#[0-9A-Fa-f]{6}$/.test(configData.font_color) ? configData.font_color : DEFAULT_FONT_COLOR)
       setStudentName(String(configData.student_name ?? ''))
       setStudentId(String(configData.student_id ?? ''))
       setClassName(String(configData.class_name ?? ''))
@@ -148,6 +154,7 @@ function CopybookEditor({ config, onConfigChange }) {
       lines_per_char: linesPerChar,
       show_pinyin: showPinyin,
       font_style: fontStyle,
+      font_color: fontColor,
       student_name: studentName,
       student_id: studentId,
       class_name: className,
@@ -156,7 +163,7 @@ function CopybookEditor({ config, onConfigChange }) {
     if (onConfigChange) {
       onConfigChange(newConfig)
     }
-  }, [inputText, gridType, gridColor, gridSizeCm, linesPerChar, showPinyin, fontStyle, studentName, studentId, className, pageSize, onConfigChange])
+  }, [inputText, gridType, gridColor, gridSizeCm, linesPerChar, showPinyin, fontStyle, fontColor, studentName, studentId, className, pageSize, onConfigChange])
 
   const hexToRgba = (hex, alpha) => {
     const validHex = /^#[0-9A-Fa-f]{6}$/.test(hex) ? hex : DEFAULT_GRID_COLOR
@@ -166,69 +173,156 @@ function CopybookEditor({ config, onConfigChange }) {
     return `rgba(${r}, ${g}, ${b}, ${alpha})`
   }
 
-  const drawGrid = useCallback((ctx, x, y, size, type, color, character = '', isTemplate = false, pinyin = '', showPinyin = false) => {
+  const drawGrid = useCallback((ctx, x, y, size, type, color, character = '', isTemplate = false, pinyin = '', showPinyin = false, fontColor = DEFAULT_FONT_COLOR) => {
+    const drawDashedLine = (ctx, x1, y1, x2, y2, dashLength = 5) => {
+      const dx = x2 - x1
+      const dy = y2 - y1
+      const length = Math.sqrt(dx * dx + dy * dy)
+      const dashCount = Math.floor(length / (dashLength * 2))
+      const actualDashLength = length / (dashCount * 2)
+
+      ctx.beginPath()
+      for (let i = 0; i < dashCount; i++) {
+        const startRatio = (i * 2) / (dashCount * 2)
+        const endRatio = (i * 2 + 1) / (dashCount * 2)
+        ctx.moveTo(x1 + dx * startRatio, y1 + dy * startRatio)
+        ctx.lineTo(x1 + dx * endRatio, y1 + dy * endRatio)
+      }
+      ctx.stroke()
+    }
+
     if (isTemplate && character) {
       ctx.fillStyle = '#f5f5f5'
       ctx.fillRect(x, y, size, size)
     }
 
-    if (showPinyin && isTemplate && pinyin) {
-      const pinyinFontSize = Math.max(10, Math.floor(size * 0.18))
-      ctx.font = `${pinyinFontSize}px sans-serif`
-      ctx.textAlign = 'center'
-      ctx.textBaseline = 'top'
-      ctx.fillStyle = '#666666'
-      ctx.fillText(pinyin, x + size / 2, y + 2)
-    }
-
     ctx.strokeStyle = hexToRgba(color, 0.7)
     ctx.lineWidth = 1
-    ctx.strokeRect(x, y, size, size)
 
-    ctx.strokeStyle = hexToRgba(color, 0.4)
+    if (showPinyin) {
+      const pinyinGridHeight = size / 3
+      const charGridHeight = size - pinyinGridHeight
+      const charGridY = y + pinyinGridHeight
 
-    if (type === GridType.TIANZI || type === GridType.MIZI) {
+      ctx.strokeRect(x, y, size, size)
+
+      ctx.strokeStyle = hexToRgba(color, 0.7)
       ctx.beginPath()
-      ctx.moveTo(x, y + size / 2)
-      ctx.lineTo(x + size, y + size / 2)
+      ctx.moveTo(x, charGridY)
+      ctx.lineTo(x + size, charGridY)
       ctx.stroke()
 
-      ctx.beginPath()
-      ctx.moveTo(x + size / 2, y)
-      ctx.lineTo(x + size / 2, y + size)
-      ctx.stroke()
-    }
+      ctx.strokeStyle = hexToRgba(color, 0.5)
+      const line1Y = y
+      const line2Y = y + pinyinGridHeight * 0.25
+      const line3Y = y + pinyinGridHeight * 0.75
+      const line4Y = charGridY
 
-    if (type === GridType.MIZI) {
-      ctx.beginPath()
-      ctx.moveTo(x, y)
-      ctx.lineTo(x + size, y + size)
-      ctx.stroke()
+      if (isTemplate && pinyin) {
+        const pinyinFontSize = Math.max(10, Math.floor(pinyinGridHeight * 0.5))
+        ctx.font = `${pinyinFontSize}px sans-serif`
+        ctx.textAlign = 'center'
+        ctx.textBaseline = 'middle'
+        ctx.fillStyle = '#666666'
+        ctx.fillText(pinyin, x + size / 2, line2Y + (line3Y - line2Y) / 2)
+      }
 
-      ctx.beginPath()
-      ctx.moveTo(x + size, y)
-      ctx.lineTo(x, y + size)
-      ctx.stroke()
-    }
+      ctx.strokeStyle = hexToRgba(color, 0.5)
+      drawDashedLine(ctx, x, line2Y, x + size, line2Y, 3)
+      drawDashedLine(ctx, x, line3Y, x + size, line3Y, 3)
 
-    if (type === GridType.HUIGONG) {
-      const innerMargin = Math.floor(size / 5)
-      ctx.strokeRect(
-        x + innerMargin,
-        y + innerMargin,
-        size - innerMargin * 2,
-        size - innerMargin * 2
-      )
-    }
+      if (type === GridType.TIANZI || type === GridType.MIZI) {
+        ctx.strokeStyle = hexToRgba(color, 0.4)
+        ctx.beginPath()
+        ctx.moveTo(x, charGridY + charGridHeight / 2)
+        ctx.lineTo(x + size, charGridY + charGridHeight / 2)
+        ctx.stroke()
 
-    if (character) {
-      const charOffset = showPinyin && isTemplate ? Math.floor(size * 0.12) : 0
-      const charFontSize = Math.floor(size * 0.7)
-      ctx.font = `${charFontSize}px sans-serif`
-      ctx.textAlign = 'center'
-      ctx.textBaseline = 'middle'
-      ctx.fillStyle = isTemplate ? '#b4b4b4' : '#646464'
-      ctx.fillText(character, x + size / 2, y + size / 2 + charOffset)
+        ctx.beginPath()
+        ctx.moveTo(x + size / 2, charGridY)
+        ctx.lineTo(x + size / 2, charGridY + charGridHeight)
+        ctx.stroke()
+      }
+
+      if (type === GridType.MIZI) {
+        ctx.strokeStyle = hexToRgba(color, 0.4)
+        ctx.beginPath()
+        ctx.moveTo(x, charGridY)
+        ctx.lineTo(x + size, charGridY + charGridHeight)
+        ctx.stroke()
+
+        ctx.beginPath()
+        ctx.moveTo(x + size, charGridY)
+        ctx.lineTo(x, charGridY + charGridHeight)
+        ctx.stroke()
+      }
+
+      if (type === GridType.HUIGONG) {
+        ctx.strokeStyle = hexToRgba(color, 0.4)
+        const innerMargin = Math.floor(charGridHeight / 5)
+        ctx.strokeRect(
+          x + innerMargin,
+          charGridY + innerMargin,
+          size - innerMargin * 2,
+          charGridHeight - innerMargin * 2
+        )
+      }
+
+      if (character) {
+        const charFontSize = Math.floor(charGridHeight * 0.7)
+        ctx.font = `${charFontSize}px sans-serif`
+        ctx.textAlign = 'center'
+        ctx.textBaseline = 'middle'
+        ctx.fillStyle = isTemplate ? fontColor : '#646464'
+        ctx.fillText(character, x + size / 2, charGridY + charGridHeight / 2)
+      }
+    } else {
+      ctx.strokeRect(x, y, size, size)
+
+      ctx.strokeStyle = hexToRgba(color, 0.4)
+
+      if (type === GridType.TIANZI || type === GridType.MIZI) {
+        ctx.beginPath()
+        ctx.moveTo(x, y + size / 2)
+        ctx.lineTo(x + size, y + size / 2)
+        ctx.stroke()
+
+        ctx.beginPath()
+        ctx.moveTo(x + size / 2, y)
+        ctx.lineTo(x + size / 2, y + size)
+        ctx.stroke()
+      }
+
+      if (type === GridType.MIZI) {
+        ctx.beginPath()
+        ctx.moveTo(x, y)
+        ctx.lineTo(x + size, y + size)
+        ctx.stroke()
+
+        ctx.beginPath()
+        ctx.moveTo(x + size, y)
+        ctx.lineTo(x, y + size)
+        ctx.stroke()
+      }
+
+      if (type === GridType.HUIGONG) {
+        const innerMargin = Math.floor(size / 5)
+        ctx.strokeRect(
+          x + innerMargin,
+          y + innerMargin,
+          size - innerMargin * 2,
+          size - innerMargin * 2
+        )
+      }
+
+      if (character) {
+        const charFontSize = Math.floor(size * 0.7)
+        ctx.font = `${charFontSize}px sans-serif`
+        ctx.textAlign = 'center'
+        ctx.textBaseline = 'middle'
+        ctx.fillStyle = isTemplate ? fontColor : '#646464'
+        ctx.fillText(character, x + size / 2, y + size / 2)
+      }
     }
   }, [])
 
@@ -447,7 +541,7 @@ function CopybookEditor({ config, onConfigChange }) {
         for (let col = 0; col < cols; col++) {
           const x = offsetX + previewMarginLeft + previewGridPadding + col * previewCellSize
           const y = offsetY + mmToPx(marginTopMm + row * cellSizeMm)
-          drawGrid(ctx, x, y, previewCellSize, gridType, gridColor)
+          drawGrid(ctx, x, y, previewCellSize, gridType, gridColor, '', false, '', showPinyin)
         }
       }
       ctx.restore()
@@ -474,7 +568,7 @@ function CopybookEditor({ config, onConfigChange }) {
           const isTemplate = col === 0
           const charToDraw = isTemplate ? currentChar : ''
 
-          drawGrid(ctx, x, y, previewCellSize, gridType, gridColor, charToDraw, isTemplate, charPinyin, showPinyin)
+          drawGrid(ctx, x, y, previewCellSize, gridType, gridColor, charToDraw, isTemplate, charPinyin, showPinyin, fontColor)
         }
         rowIndex++
         linesOffset++
@@ -490,13 +584,13 @@ function CopybookEditor({ config, onConfigChange }) {
       for (let col = 0; col < cols; col++) {
         const x = offsetX + previewMarginLeft + previewGridPadding + col * previewCellSize
         const y = offsetY + mmToPx(marginTopMm + rowIndex * cellSizeMm)
-        drawGrid(ctx, x, y, previewCellSize, gridType, gridColor)
+        drawGrid(ctx, x, y, previewCellSize, gridType, gridColor, '', false, '', showPinyin)
       }
       rowIndex++
     }
 
     ctx.restore()
-  }, [validChars, gridType, gridColor, drawGrid, pageSize, studentName, studentId, className, gridSizeCm, linesPerChar, currentPage, pinyinData, showPinyin, calculatePageInfo])
+  }, [validChars, gridType, gridColor, drawGrid, pageSize, studentName, studentId, className, gridSizeCm, linesPerChar, currentPage, pinyinData, showPinyin, fontColor, calculatePageInfo])
 
   useEffect(() => {
     if (currentPage >= totalPages && totalPages > 0) {
@@ -549,6 +643,7 @@ function CopybookEditor({ config, onConfigChange }) {
           lines_per_char: linesPerChar,
           show_pinyin: showPinyin,
           font_style: fontStyle,
+          font_color: fontColor,
           grid_size: gridSize,
           student_name: studentName,
           student_id: studentId,
@@ -593,6 +688,7 @@ function CopybookEditor({ config, onConfigChange }) {
         lines_per_char: linesPerChar,
         show_pinyin: showPinyin,
         font_style: fontStyle,
+        font_color: fontColor,
         student_name: studentName,
         student_id: studentId,
         class_name: className,
@@ -816,6 +912,35 @@ function CopybookEditor({ config, onConfigChange }) {
                 </option>
               ))}
             </select>
+          </div>
+
+          <h3 className="section-title" style={{ marginTop: '16px' }}>字体颜色</h3>
+          <div className="form-group">
+            <div className="color-input-row">
+              <input
+                type="color"
+                className="color-picker-input"
+                value={fontColor}
+                onChange={(e) => setFontColor(e.target.value)}
+              />
+              <input
+                type="text"
+                className="form-input color-hex-input"
+                value={fontColor}
+                onChange={(e) => {
+                  const val = e.target.value
+                  if (/^#[0-9A-Fa-f]{0,6}$/.test(val)) {
+                    setFontColor(val.length === 7 ? val : fontColor)
+                  }
+                }}
+                onBlur={(e) => {
+                  const val = e.target.value
+                  if (/^#[0-9A-Fa-f]{6}$/.test(val)) {
+                    setFontColor(val)
+                  }
+                }}
+              />
+            </div>
           </div>
         </div>
 

@@ -39,6 +39,25 @@ CORS(app)
 db = TemplateDatabase()
 
 
+def hex_to_rgb(hex_color: str) -> Tuple[float, float, float]:
+    """
+    将HEX颜色转换为RGB元组（值为0.0-1.0）
+    
+    Args:
+        hex_color: HEX颜色字符串，如 "#FF0000"
+        
+    Returns:
+        RGB元组，如 (1.0, 0.0, 0.0)
+    """
+    hex_color = hex_color.lstrip('#')
+    if len(hex_color) == 6:
+        r = int(hex_color[0:2], 16) / 255.0
+        g = int(hex_color[2:4], 16) / 255.0
+        b = int(hex_color[4:6], 16) / 255.0
+        return (r, g, b)
+    return (0.0, 0.0, 0.0)
+
+
 @app.route('/api/templates', methods=['GET'])
 def get_templates():
     """
@@ -464,6 +483,11 @@ def export_pdf():
         page_size_key = data.get('page_size', DEFAULT_PAGE_SIZE)
         paper_size = PAGE_SIZES.get(page_size_key, PAGE_SIZES[DEFAULT_PAGE_SIZE])
         
+        font_color_hex = data.get('font_color', '#000000')
+        if not isinstance(font_color_hex, str) or not re.match(r'^#[0-9A-Fa-f]{6}$', font_color_hex):
+            font_color_hex = '#000000'
+        font_color = hex_to_rgb(font_color_hex)
+        
         import tempfile
         with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as tmp:
             output_path = tmp.name
@@ -473,6 +497,7 @@ def export_pdf():
                 paper_size=paper_size,
                 grid_type=grid_type_code,
                 font_style=font_style,
+                font_color=font_color,
                 grid_size_cm=grid_size_cm,
                 lines_per_char=lines_per_char,
                 show_pinyin=show_pinyin,
