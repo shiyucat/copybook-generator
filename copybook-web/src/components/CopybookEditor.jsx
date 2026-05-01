@@ -258,7 +258,6 @@ function CopybookEditor({ config, onConfigChange }) {
     const mmToPx = (mm) => mm * scale
 
     const previewMarginLeft = mmToPx(marginLeftMm)
-    const previewMarginTop = mmToPx(marginTopMm)
     const previewGridPadding = mmToPx(gridPaddingMm)
     const previewCellSize = mmToPx(cellSizeMm)
 
@@ -286,7 +285,7 @@ function CopybookEditor({ config, onConfigChange }) {
 
     const infoText = infoParts.join('  ')
     const headerX = offsetX + mmToPx(pageWidthMm - marginRightMm)
-    const headerY = offsetY + previewMarginTop / 2
+    const headerY = offsetY + mmToPx(15)
 
     ctx.fillText(infoText, headerX, headerY)
 
@@ -294,7 +293,7 @@ function CopybookEditor({ config, onConfigChange }) {
       for (let row = 0; row < maxRows; row++) {
         for (let col = 0; col < cols; col++) {
           const x = offsetX + previewMarginLeft + previewGridPadding + col * previewCellSize
-          const y = offsetY + mmToPx(pageHeightMm - marginTopMm - (row + 1) * cellSizeMm)
+          const y = offsetY + mmToPx(marginTopMm + row * cellSizeMm)
           drawGrid(ctx, x, y, previewCellSize, gridType, gridColor)
         }
       }
@@ -311,7 +310,7 @@ function CopybookEditor({ config, onConfigChange }) {
 
       for (let col = 0; col < cols; col++) {
         const x = offsetX + previewMarginLeft + previewGridPadding + col * previewCellSize
-        const y = offsetY + mmToPx(pageHeightMm - marginTopMm - (rowIndex + 1) * cellSizeMm)
+        const y = offsetY + mmToPx(marginTopMm + rowIndex * cellSizeMm)
 
         const isTemplate = col === 0
         const charToDraw = isTemplate ? currentChar : ''
