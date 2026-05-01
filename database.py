@@ -123,7 +123,8 @@ class TemplateDatabase:
     def save_template(self, template: Template) -> int:
         """
         保存模版
-        如果 template_name 已存在，则更新；否则创建新模版
+        如果 template_id 存在且不为 None，则根据 ID 更新
+        否则，如果 template_name 已存在，则更新；否则创建新模版
         
         Args:
             template: 模版对象
@@ -136,9 +137,26 @@ class TemplateDatabase:
         
         now = datetime.now().isoformat()
         
-        existing = self.get_template_by_name(template.template_name)
+        if template.template_id is not None:
+            existing_by_id = self.get_template_by_id(template.template_id)
+            if existing_by_id:
+                cursor.execute("""
+                    UPDATE templates 
+                    SET template_name = ?, config_data = ?, updated_at = ?
+                    WHERE id = ?
+                """, (
+                    template.template_name,
+                    json.dumps(template.config_data, ensure_ascii=False),
+                    now,
+                    template.template_id
+                ))
+                conn.commit()
+                conn.close()
+                return template.template_id
         
-        if existing:
+        existing_by_name = self.get_template_by_name(template.template_name)
+        
+        if existing_by_name:
             cursor.execute("""
                 UPDATE templates 
                 SET config_data = ?, updated_at = ?
@@ -148,7 +166,7 @@ class TemplateDatabase:
                 now,
                 template.template_name
             ))
-            template_id = existing.template_id
+            template_id = existing_by_name.template_id
         else:
             cursor.execute("""
                 INSERT INTO templates (template_name, config_data, created_at, updated_at)
