@@ -103,4 +103,25 @@ export const exportApi = {
   },
 }
 
+export const pinyinApi = {
+  async getPinyin(characters) {
+    const response = await fetch(`${API_BASE}/pinyin`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ characters }),
+    })
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}))
+      throw new Error(errorData.error || '获取拼音失败')
+    }
+
+    const data = await response.json()
+    if (!data.success) throw new Error(data.error || '获取拼音失败')
+    return data.data || {}
+  },
+}
+
 export default templateApi

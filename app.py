@@ -14,6 +14,8 @@ from flask import Flask, jsonify, request, make_response
 from flask_cors import CORS
 from pathlib import Path
 
+from pypinyin import pinyin, Style
+
 from database import TemplateDatabase, Template
 from copybook_generator import (
     CopybookGenerator, 
@@ -431,6 +433,7 @@ def export_pdf():
                 font_style=font_style,
                 grid_size_cm=grid_size_cm,
                 lines_per_char=lines_per_char,
+                show_pinyin=show_pinyin,
                 student_name=student_name,
                 student_id=student_id,
                 class_name=class_name
@@ -465,6 +468,69 @@ def export_pdf():
                 os.unlink(output_path)
             raise e
             
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/pinyin', methods=['POST'])
+def get_pinyin():
+    """
+    获取汉字拼音
+    
+    Request Body:
+        {
+            "characters": ["一", "二", "三"]
+        }
+    
+    Returns:
+        {
+            "success": true,
+            "data": {
+                "一": "yī",
+                "二": "èr",
+                "三": "sān"
+            }
+        }
+    """
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({
+                'success': False,
+                'error': '请求数据为空'
+            }), 400
+        
+        characters = data.get('characters', [])
+        if not characters:
+            return jsonify({
+                'success': False,
+                'error': '请输入汉字'
+            }), 400
+        
+        if not isinstance(characters, list):
+            characters = [characters]
+        
+        result = {}
+        for char in characters:
+            if char:
+                try:
+                    pinyin_list = pinyin(char, style=Style.TONE)
+                    if pinyin_list and pinyin_list[0]:
+                        result[char] = pinyin_list[0][0]
+                    else:
+                        result[char] = char
+                except Exception:
+                    result[char] = char
+        
+        return jsonify({
+            'success': True,
+            'data': result
+        })
+        
     except Exception as e:
         return jsonify({
             'success': False,

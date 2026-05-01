@@ -3,3 +3,4 @@ Pillow
 hanzi-writer-data
 Flask
 flask-cors
+pypinyin
