@@ -1,13 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import templateApi from '../services/api'
 
-function TemplateManager({ onApplyTemplate, currentConfig }) {
+function TemplateManager({ onApplyTemplate }) {
   const [templates, setTemplates] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const [showSaveDialog, setShowSaveDialog] = useState(false)
-  const [newTemplateName, setNewTemplateName] = useState('')
-  const [saving, setSaving] = useState(false)
   const [selectedTemplate, setSelectedTemplate] = useState(null)
 
   const fetchTemplates = useCallback(async () => {
@@ -26,31 +23,6 @@ function TemplateManager({ onApplyTemplate, currentConfig }) {
   useEffect(() => {
     fetchTemplates()
   }, [fetchTemplates])
-
-  const handleSaveTemplate = async () => {
-    if (!newTemplateName.trim()) {
-      alert('请输入模版名称')
-      return
-    }
-
-    setSaving(true)
-    try {
-      const { input_text, ...templateConfig } = currentConfig
-      const templateData = {
-        template_name: newTemplateName.trim(),
-        config_data: templateConfig,
-      }
-      await templateApi.create(templateData)
-      setNewTemplateName('')
-      setShowSaveDialog(false)
-      fetchTemplates()
-      alert('模版保存成功')
-    } catch (err) {
-      alert(`保存失败: ${err.message}`)
-    } finally {
-      setSaving(false)
-    }
-  }
 
   const handleDeleteTemplate = async (template) => {
     if (!window.confirm(`确定要删除模版「${template.template_name}」吗？\n此操作不可恢复。`)) {
@@ -94,12 +66,6 @@ function TemplateManager({ onApplyTemplate, currentConfig }) {
     <div className="template-manager">
       <div className="template-header">
         <h2>模版管理</h2>
-        <button
-          className="btn btn-primary"
-          onClick={() => setShowSaveDialog(true)}
-        >
-          保存当前配置为模版
-        </button>
       </div>
 
       {loading ? (
@@ -115,7 +81,7 @@ function TemplateManager({ onApplyTemplate, currentConfig }) {
         <div className="empty-state">
           <div className="empty-icon">📂</div>
           <h3>暂无保存的模版</h3>
-          <p>点击上方按钮保存当前配置为模版</p>
+          <p>在字帖编辑页面点击「保存模版」按钮创建新模版</p>
         </div>
       ) : (
         <div className="template-list">
@@ -197,6 +163,14 @@ function TemplateManager({ onApplyTemplate, currentConfig }) {
                         {template.config_data?.font_style === 'xingkai' ? '行楷' : '正楷'}
                       </span>
                     </div>
+                    {template.config_data?.page_size && (
+                      <div className="config-item">
+                        <span className="config-label">页面大小:</span>
+                        <span className="config-value">
+                          {template.config_data.page_size === 'SIZE_16K' ? '16开' : template.config_data.page_size}
+                        </span>
+                      </div>
+                    )}
                     {template.config_data?.student_name && (
                       <div className="config-item">
                         <span className="config-label">姓名:</span>
@@ -226,48 +200,6 @@ function TemplateManager({ onApplyTemplate, currentConfig }) {
               )}
             </div>
           ))}
-        </div>
-      )}
-
-      {showSaveDialog && (
-        <div className="modal-overlay" onClick={() => setShowSaveDialog(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3>保存为模版</h3>
-              <button
-                className="modal-close"
-                onClick={() => setShowSaveDialog(false)}
-              >
-                ✕
-              </button>
-            </div>
-            <div className="modal-body">
-              <label className="form-label">模版名称</label>
-              <input
-                type="text"
-                className="form-input"
-                value={newTemplateName}
-                onChange={(e) => setNewTemplateName(e.target.value)}
-                placeholder="请输入模版名称"
-                autoFocus
-              />
-            </div>
-            <div className="modal-footer">
-              <button
-                className="btn btn-secondary"
-                onClick={() => setShowSaveDialog(false)}
-              >
-                取消
-              </button>
-              <button
-                className="btn btn-primary"
-                onClick={handleSaveTemplate}
-                disabled={saving || !newTemplateName.trim()}
-              >
-                {saving ? '保存中...' : '保存'}
-              </button>
-            </div>
-          </div>
         </div>
       )}
     </div>

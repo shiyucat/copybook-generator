@@ -15,7 +15,7 @@ from flask_cors import CORS
 from pathlib import Path
 
 from database import TemplateDatabase, Template
-from copybook_generator import CopybookGenerator
+from copybook_generator import CopybookGenerator, PAGE_SIZES, DEFAULT_PAGE_SIZE
 
 
 app = Flask(__name__)
@@ -385,6 +385,8 @@ def export_pdf():
         student_name = data.get('student_name', '')
         student_id = data.get('student_id', '')
         class_name = data.get('class_name', '')
+        page_size_key = data.get('page_size', DEFAULT_PAGE_SIZE)
+        paper_size = PAGE_SIZES.get(page_size_key, PAGE_SIZES[DEFAULT_PAGE_SIZE])
         
         import tempfile
         with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as tmp:
@@ -392,6 +394,7 @@ def export_pdf():
         
         try:
             generator = CopybookGenerator(
+                paper_size=paper_size,
                 grid_type=grid_type_code,
                 font_style=font_style,
                 student_name=student_name,

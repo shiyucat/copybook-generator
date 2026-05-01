@@ -10,6 +10,15 @@ const GridType = {
 
 const DEFAULT_GRID_COLOR = '#000000'
 
+const PageSize = {
+  A4: { name: 'A4', width: 210, height: 297 },
+  SIZE_16K: { name: '16开', width: 185, height: 260 },
+  A5: { name: 'A5', width: 148, height: 210 },
+  B5: { name: 'B5', width: 176, height: 250 },
+}
+
+const DEFAULT_PAGE_SIZE = 'A4'
+
 function CopybookEditor({ config, onConfigChange }) {
   const canvasRef = useRef(null)
   const safeConfig = config && typeof config === 'object' ? config : {}
@@ -22,6 +31,7 @@ function CopybookEditor({ config, onConfigChange }) {
   const [studentName, setStudentName] = useState(String(safeConfig.student_name ?? ''))
   const [studentId, setStudentId] = useState(String(safeConfig.student_id ?? ''))
   const [className, setClassName] = useState(String(safeConfig.class_name ?? ''))
+  const [pageSize, setPageSize] = useState(safeConfig.page_size ?? DEFAULT_PAGE_SIZE)
   const [showSaveDialog, setShowSaveDialog] = useState(false)
   const [newTemplateName, setNewTemplateName] = useState('')
   const [saving, setSaving] = useState(false)
@@ -58,6 +68,7 @@ function CopybookEditor({ config, onConfigChange }) {
       setStudentName(String(config.student_name ?? ''))
       setStudentId(String(config.student_id ?? ''))
       setClassName(String(config.class_name ?? ''))
+      setPageSize(config.page_size ?? DEFAULT_PAGE_SIZE)
     }
   }, [config])
 
@@ -75,6 +86,7 @@ function CopybookEditor({ config, onConfigChange }) {
       setStudentName(String(configData.student_name ?? ''))
       setStudentId(String(configData.student_id ?? ''))
       setClassName(String(configData.class_name ?? ''))
+      setPageSize(configData.page_size ?? DEFAULT_PAGE_SIZE)
       setInputText(String(configData.input_text ?? ''))
       alert('模版已应用')
     }
@@ -90,11 +102,12 @@ function CopybookEditor({ config, onConfigChange }) {
       student_name: studentName,
       student_id: studentId,
       class_name: className,
+      page_size: pageSize,
     }
     if (onConfigChange) {
       onConfigChange(newConfig)
     }
-  }, [inputText, gridType, gridColor, fontStyle, studentName, studentId, className, onConfigChange])
+  }, [inputText, gridType, gridColor, fontStyle, studentName, studentId, className, pageSize, onConfigChange])
 
   const hexToRgba = (hex, alpha) => {
     const validHex = /^#[0-9A-Fa-f]{6}$/.test(hex) ? hex : DEFAULT_GRID_COLOR
@@ -199,8 +212,7 @@ function CopybookEditor({ config, onConfigChange }) {
     ctx.fillStyle = '#ffffff'
     ctx.fillRect(0, 0, width, height)
 
-    const hasStudentInfo = studentName || studentId || className
-    const headerHeight = hasStudentInfo ? 30 : 0
+    const headerHeight = 30
     const padding = 5
     const size = gridSize
     const gridPadding = 5
@@ -209,23 +221,21 @@ function CopybookEditor({ config, onConfigChange }) {
     const cols = Math.max(1, Math.floor((width - padding * 2) / (size + gridPadding)))
     const maxRows = Math.max(1, Math.floor(contentHeight / (size + gridPadding)))
 
-    if (hasStudentInfo) {
-      ctx.font = '12px sans-serif'
-      ctx.textAlign = 'right'
-      ctx.textBaseline = 'middle'
-      ctx.fillStyle = '#333'
+    ctx.font = '12px sans-serif'
+    ctx.textAlign = 'right'
+    ctx.textBaseline = 'middle'
+    ctx.fillStyle = '#333'
 
-      const infoParts = []
-      if (studentName) infoParts.push(`姓名：${studentName}`)
-      if (studentId) infoParts.push(`学号：${studentId}`)
-      if (className) infoParts.push(`班级：${className}`)
+    const infoParts = []
+    infoParts.push(`姓名：${studentName || '______'}`)
+    infoParts.push(`学号：${studentId || '______'}`)
+    infoParts.push(`班级：${className || '______'}`)
 
-      const infoText = infoParts.join('  ')
-      const x = width - padding
-      const y = headerHeight / 2
+    const infoText = infoParts.join('  ')
+    const x = width - padding
+    const y = headerHeight / 2
 
-      ctx.fillText(infoText, x, y)
-    }
+    ctx.fillText(infoText, x, y)
 
     const contentTopY = headerHeight + padding
 
@@ -251,7 +261,7 @@ function CopybookEditor({ config, onConfigChange }) {
 
       for (let col = 0; col < cols; col++) {
         const x = padding + col * (size + gridPadding)
-        const y = contentTopY + row * (size + gridPadding)
+        const y = contentTopY + rowIndex * (size + gridPadding)
 
         if (x + size > width || y + size > height) {
           continue
@@ -314,6 +324,7 @@ function CopybookEditor({ config, onConfigChange }) {
           student_name: studentName,
           student_id: studentId,
           class_name: className,
+          page_size: pageSize,
           input_text: inputText,
         },
       }
@@ -353,6 +364,7 @@ function CopybookEditor({ config, onConfigChange }) {
         student_name: studentName,
         student_id: studentId,
         class_name: className,
+        page_size: pageSize,
       }
       await exportApi.exportPdf(exportData)
       setShowExportDialog(false)
@@ -521,6 +533,32 @@ function CopybookEditor({ config, onConfigChange }) {
                 </option>
               ))}
             </select>
+          </div>
+        </div>
+
+        <div className="section">
+          <h3 className="section-title">页面大小</h3>
+          <div className="form-group">
+            <div className="radio-group">
+              {Object.entries(PageSize).map(([key, size]) => (
+                <label key={key} className="radio-label">
+                  <input
+                    type="radio"
+                    name="pageSize"
+                    value={key}
+                    checked={pageSize === key}
+                    onChange={(e) => setPageSize(e.target.value)}
+                    className="radio-input"
+                  />
+                  <span className="radio-text">
+                    {size.name}
+                    <span className="radio-subtext">
+                      ({size.width}×{size.height}mm)
+                    </span>
+                  </span>
+                </label>
+              ))}
+            </div>
           </div>
         </div>
 

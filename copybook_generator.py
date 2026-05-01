@@ -17,10 +17,22 @@ from pathlib import Path
 import urllib.request
 import urllib.error
 
-from reportlab.lib.pagesizes import A4
+from reportlab.lib.pagesizes import A4, A5, B5
 from reportlab.lib.units import mm
 from reportlab.pdfgen import canvas
 from reportlab.lib.colors import Color, black, gray, red, blue
+
+SIZE_16K = (185 * mm, 260 * mm)
+
+PAGE_SIZES = {
+    'A4': A4,
+    'SIZE_16K': SIZE_16K,
+    '16开': SIZE_16K,
+    'A5': A5,
+    'B5': B5,
+}
+
+DEFAULT_PAGE_SIZE = 'A4'
 
 light_red = Color(1.0, 0.4, 0.4, alpha=0.8)
 from reportlab.pdfbase import pdfmetrics
@@ -2432,7 +2444,7 @@ class CopybookGenerator:
                 return False, error_msg
         
         try:
-            c = canvas.Canvas(output_path, pagesize=A4)
+            c = canvas.Canvas(output_path, pagesize=(self.paper_width, self.paper_height))
             
             total_chars = len(characters)
             chars_per_page = self.grid_rows

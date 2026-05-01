@@ -13,6 +13,7 @@ const DEFAULT_CONFIG = {
   student_name: '',
   student_id: '',
   class_name: '',
+  page_size: 'A4',
 }
 
 function App() {
@@ -35,6 +36,7 @@ function App() {
       student_name: String(safeConfig.student_name ?? DEFAULT_CONFIG.student_name),
       student_id: String(safeConfig.student_id ?? DEFAULT_CONFIG.student_id),
       class_name: String(safeConfig.class_name ?? DEFAULT_CONFIG.class_name),
+      page_size: safeConfig.page_size ?? DEFAULT_CONFIG.page_size,
     }
     setCurrentConfig(mergedConfig)
     setActivePage('editor')
