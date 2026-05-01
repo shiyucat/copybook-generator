@@ -9,6 +9,7 @@ function App() {
   const [currentConfig, setCurrentConfig] = useState({
     input_text: '',
     grid_type: '田字格',
+    grid_color: '#000000',
     grid_size: 60,
     font_style: 'zhenkai',
     student_name: '',

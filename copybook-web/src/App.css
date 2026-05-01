@@ -191,6 +191,73 @@ body {
   line-height: 1.5;
 }
 
+.input-error {
+  font-size: 12px;
+  color: var(--danger-color);
+  margin-top: 8px;
+  line-height: 1.5;
+  padding: 8px;
+  background-color: rgba(220, 53, 69, 0.1);
+  border-radius: 4px;
+}
+
+.color-picker-container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.color-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.color-swatch {
+  width: 28px;
+  height: 28px;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: all 0.2s;
+  padding: 0;
+}
+
+.color-swatch:hover {
+  transform: scale(1.1);
+}
+
+.color-swatch.active {
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 2px rgba(74, 144, 217, 0.3);
+}
+
+.color-custom {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.color-input-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.color-picker-input {
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  cursor: pointer;
+  padding: 2px;
+}
+
+.color-hex-input {
+  flex: 1;
+  font-family: monospace;
+}
+
 .radio-group {
   display: flex;
   flex-direction: column;
