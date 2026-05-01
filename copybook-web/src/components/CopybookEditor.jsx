@@ -12,13 +12,16 @@ const DEFAULT_GRID_COLOR = '#000000'
 
 function CopybookEditor({ config, onConfigChange }) {
   const canvasRef = useRef(null)
-  const [inputText, setInputText] = useState(config.input_text || '')
-  const [gridType, setGridType] = useState(config.grid_type || GridType.TIANZI)
-  const [gridColor, setGridColor] = useState(config.grid_color || DEFAULT_GRID_COLOR)
-  const [fontStyle, setFontStyle] = useState(config.font_style || 'zhenkai')
-  const [studentName, setStudentName] = useState(config.student_name || '')
-  const [studentId, setStudentId] = useState(config.student_id || '')
-  const [className, setClassName] = useState(config.class_name || '')
+  const safeConfig = config && typeof config === 'object' ? config : {}
+  const [inputText, setInputText] = useState(String(safeConfig.input_text ?? ''))
+  const [gridType, setGridType] = useState(safeConfig.grid_type ?? GridType.TIANZI)
+  const [gridColor, setGridColor] = useState(
+    /^#[0-9A-Fa-f]{6}$/.test(safeConfig.grid_color) ? safeConfig.grid_color : DEFAULT_GRID_COLOR
+  )
+  const [fontStyle, setFontStyle] = useState(safeConfig.font_style ?? 'zhenkai')
+  const [studentName, setStudentName] = useState(String(safeConfig.student_name ?? ''))
+  const [studentId, setStudentId] = useState(String(safeConfig.student_id ?? ''))
+  const [className, setClassName] = useState(String(safeConfig.class_name ?? ''))
   const [showSaveDialog, setShowSaveDialog] = useState(false)
   const [newTemplateName, setNewTemplateName] = useState('')
   const [saving, setSaving] = useState(false)
@@ -47,14 +50,14 @@ function CopybookEditor({ config, onConfigChange }) {
   }, [fetchTemplates])
 
   useEffect(() => {
-    if (config) {
-      setInputText(config.input_text || '')
-      setGridType(config.grid_type || GridType.TIANZI)
-      setGridColor(config.grid_color || DEFAULT_GRID_COLOR)
-      setFontStyle(config.font_style || 'zhenkai')
-      setStudentName(config.student_name || '')
-      setStudentId(config.student_id || '')
-      setClassName(config.class_name || '')
+    if (config && typeof config === 'object') {
+      setInputText(String(config.input_text ?? ''))
+      setGridType(config.grid_type ?? GridType.TIANZI)
+      setGridColor(/^#[0-9A-Fa-f]{6}$/.test(config.grid_color) ? config.grid_color : DEFAULT_GRID_COLOR)
+      setFontStyle(config.font_style ?? 'zhenkai')
+      setStudentName(String(config.student_name ?? ''))
+      setStudentId(String(config.student_id ?? ''))
+      setClassName(String(config.class_name ?? ''))
     }
   }, [config])
 
@@ -66,13 +69,13 @@ function CopybookEditor({ config, onConfigChange }) {
     const template = templates.find((t) => t.template_id === numericId)
     if (template && template.config_data) {
       const configData = template.config_data
-      setGridType(configData.grid_type || GridType.TIANZI)
-      setGridColor(configData.grid_color || DEFAULT_GRID_COLOR)
-      setFontStyle(configData.font_style || 'zhenkai')
-      setStudentName(configData.student_name || '')
-      setStudentId(configData.student_id || '')
-      setClassName(configData.class_name || '')
-      setInputText(configData.input_text || '')
+      setGridType(configData.grid_type ?? GridType.TIANZI)
+      setGridColor(/^#[0-9A-Fa-f]{6}$/.test(configData.grid_color) ? configData.grid_color : DEFAULT_GRID_COLOR)
+      setFontStyle(configData.font_style ?? 'zhenkai')
+      setStudentName(String(configData.student_name ?? ''))
+      setStudentId(String(configData.student_id ?? ''))
+      setClassName(String(configData.class_name ?? ''))
+      setInputText(String(configData.input_text ?? ''))
       alert('模版已应用')
     }
   }, [templates])
@@ -94,9 +97,10 @@ function CopybookEditor({ config, onConfigChange }) {
   }, [inputText, gridType, gridColor, fontStyle, studentName, studentId, className, onConfigChange])
 
   const hexToRgba = (hex, alpha) => {
-    const r = parseInt(hex.slice(1, 3), 16)
-    const g = parseInt(hex.slice(3, 5), 16)
-    const b = parseInt(hex.slice(5, 7), 16)
+    const validHex = /^#[0-9A-Fa-f]{6}$/.test(hex) ? hex : DEFAULT_GRID_COLOR
+    const r = parseInt(validHex.slice(1, 3), 16)
+    const g = parseInt(validHex.slice(3, 5), 16)
+    const b = parseInt(validHex.slice(5, 7), 16)
     return `rgba(${r}, ${g}, ${b}, ${alpha})`
   }
 
