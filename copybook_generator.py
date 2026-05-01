@@ -17,26 +17,344 @@ from pathlib import Path
 import urllib.request
 import urllib.error
 
-from reportlab.lib.pagesizes import A4, A5, B5
+from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm
 from reportlab.pdfgen import canvas
 from reportlab.lib.colors import Color, black, gray, red, blue
 
-SIZE_16K = (185 * mm, 260 * mm)
-
-PAGE_SIZES = {
-    'A4': A4,
-    'SIZE_16K': SIZE_16K,
-    '16开': SIZE_16K,
-    'A5': A5,
-    'B5': B5,
-}
-
-DEFAULT_PAGE_SIZE = 'A4'
-
 light_red = Color(1.0, 0.4, 0.4, alpha=0.8)
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
+
+PAGE_SIZES = {
+    "A4": A4,
+    "SIZE_16K": (185 * mm, 260 * mm),
+    "A5": (148 * mm, 210 * mm),
+    "B5": (176 * mm, 250 * mm),
+}
+
+DEFAULT_PAGE_SIZE = "A4"
+
+DEFAULT_GRID_SIZE_CM = 2.0
+DEFAULT_LINES_PER_CHAR = 1
+DEFAULT_SHOW_PINYIN = False
+BORDER_RATIO = 0.1
+
+try:
+    from PIL import Image, ImageDraw, ImageFont
+    PIL_AVAILABLE = True
+except ImportError:
+    PIL_AVAILABLE = False
+
+
+class GridType:
+    """格子类型"""
+    TIANZI = "田字格"
+    MIZI = "米字格"
+    HUIGONG = "回宫格"
+    FANGGE = "方格"
+
+
+class CopybookPreview:
+    """字帖预览绘制器 - 核心业务逻辑"""
+    
+    def __init__(self):
+        self.grid_size = 60
+        self.grid_padding = 5
+        self.font_size = 40
+        self._init_font()
+        
+    def _init_font(self):
+        """初始化字体"""
+        self.font = None
+        self.font_name = "Default"
+        self.font_path = None
+        
+        font_dirs = [
+            Path(__file__).parent / "fonts",
+            Path.home() / "Library" / "Fonts",
+            Path("/System/Library/Fonts"),
+            Path("/System/Library/Fonts/Supplemental"),
+            Path("/Library/Fonts"),
+        ]
+        
+        font_patterns = [
+            "STXINGKA.ttf", "Kai.ttc", "STKaiti.ttc", "KaiTi.ttc", 
+            "simkai.ttf", "Kai.ttf", "STKaiti.ttf", "KaiTi.ttf",
+            "Songti.ttc", "STHeiti Light.ttc", "STHeiti Medium.ttc",
+            "Hiragino Sans GB.ttc",
+        ]
+        
+        for font_dir in font_dirs:
+            if not font_dir.exists():
+                continue
+            for pattern in font_patterns:
+                font_file = font_dir / pattern
+                if font_file.exists():
+                    try:
+                        self.font = ImageFont.truetype(str(font_file), self.font_size)
+                        self.font_name = pattern
+                        self.font_path = str(font_file)
+                        return
+                    except Exception:
+                        continue
+        
+        try:
+            self.font = ImageFont.load_default()
+        except:
+            pass
+    
+    def draw_grid(self, draw: ImageDraw.Draw, x: int, y: int, grid_type: str, 
+                  character: str = "", is_template: bool = False):
+        """
+        绘制单个格子
+        
+        Args:
+            draw: ImageDraw对象
+            x: 格子左上角x坐标
+            y: 格子左上角y坐标
+            grid_type: 格子类型
+            character: 要显示的字符
+            is_template: 是否为模板字（第一个字）
+        """
+        size = self.grid_size
+        
+        if is_template and character:
+            draw.rectangle([x, y, x + size, y + size], fill=(245, 245, 245))
+        
+        draw.rectangle([x, y, x + size, y + size], outline=(128, 128, 128), width=1)
+        
+        if grid_type == GridType.TIANZI or grid_type == GridType.MIZI:
+            draw.line([x, y + size//2, x + size, y + size//2], fill=(200, 200, 200), width=1)
+            draw.line([x + size//2, y, x + size//2, y + size], fill=(200, 200, 200), width=1)
+        
+        if grid_type == GridType.MIZI:
+            draw.line([x, y, x + size, y + size], fill=(200, 200, 200), width=1)
+            draw.line([x + size, y, x, y + size], fill=(200, 200, 200), width=1)
+        
+        if grid_type == GridType.HUIGONG:
+            inner_margin = size // 5
+            draw.rectangle([x + inner_margin, y + inner_margin, 
+                           x + size - inner_margin, y + size - inner_margin], 
+                          outline=(200, 200, 200), width=1)
+        
+        if character and self.font:
+            try:
+                bbox = draw.textbbox((0, 0), character, font=self.font)
+                text_width = bbox[2] - bbox[0]
+                text_height = bbox[3] - bbox[1]
+                
+                text_x = x + (size - text_width) // 2 - bbox[0]
+                text_y = y + (size - text_height) // 2 - bbox[1]
+                
+                if is_template:
+                    draw.text((text_x, text_y), character, font=self.font, fill=(180, 180, 180))
+                else:
+                    draw.text((text_x, text_y), character, font=self.font, fill=(100, 100, 100))
+            except Exception:
+                pass
+    
+    def _calculate_layout(self, page_width: int, page_height: int):
+        """计算排版参数"""
+        cols = max(1, (page_width - self.grid_padding * 2) // (self.grid_size + self.grid_padding))
+        max_rows_per_page = max(1, (page_height - self.grid_padding * 2) // (self.grid_size + self.grid_padding))
+        return cols, max_rows_per_page
+    
+    def _generate_page_image(self, characters: List[str], start_char_index: int,
+                            grid_type: str, page_width: int, page_height: int) -> Tuple[Image.Image, int]:
+        """
+        生成单页图像
+        
+        Args:
+            characters: 字符列表
+            start_char_index: 起始字符索引
+            grid_type: 格子类型
+            page_width: 页面宽度
+            page_height: 页面高度
+            
+        Returns:
+            (图像对象, 下一页起始字符索引)
+        """
+        cols, max_rows_per_page = self._calculate_layout(page_width, page_height)
+        
+        img = Image.new('RGB', (page_width, page_height), (255, 255, 255))
+        draw = ImageDraw.Draw(img)
+        
+        total_chars = len(characters)
+        char_index = start_char_index
+        
+        for row_in_page in range(max_rows_per_page):
+            if char_index >= total_chars:
+                for col in range(cols):
+                    x = self.grid_padding + col * (self.grid_size + self.grid_padding)
+                    y = self.grid_padding + row_in_page * (self.grid_size + self.grid_padding)
+                    if x + self.grid_size <= page_width and y + self.grid_size <= page_height:
+                        self.draw_grid(draw, x, y, grid_type, "", False)
+                continue
+            
+            current_char = characters[char_index]
+            
+            for col in range(cols):
+                x = self.grid_padding + col * (self.grid_size + self.grid_padding)
+                y = self.grid_padding + row_in_page * (self.grid_size + self.grid_padding)
+                
+                if x + self.grid_size > page_width or y + self.grid_size > page_height:
+                    continue
+                
+                is_template = (col == 0)
+                if is_template:
+                    self.draw_grid(draw, x, y, grid_type, current_char, is_template)
+                else:
+                    self.draw_grid(draw, x, y, grid_type, "", False)
+            
+            char_index += 1
+        
+        return img, char_index
+    
+    def generate_preview_page(self, characters: List[str], page_number: int,
+                              grid_type: str, page_width: int, page_height: int) -> Optional[Image.Image]:
+        """
+        生成指定页码的预览图像
+        
+        Args:
+            characters: 字符列表
+            page_number: 页码（从1开始）
+            grid_type: 格子类型
+            page_width: 页面宽度
+            page_height: 页面高度
+            
+        Returns:
+            PIL Image对象，如果页码超出范围则返回None
+        """
+        if page_number < 1:
+            return None
+        
+        cols, max_rows_per_page = self._calculate_layout(page_width, page_height)
+        chars_per_page = max_rows_per_page
+        
+        total_pages = self.calculate_total_pages(characters, page_width, page_height)
+        
+        if page_number > total_pages:
+            return None
+        
+        start_char_index = (page_number - 1) * chars_per_page
+        
+        img, _ = self._generate_page_image(characters, start_char_index, grid_type, page_width, page_height)
+        return img
+    
+    def calculate_total_pages(self, characters: List[str], page_width: int, page_height: int) -> int:
+        """
+        计算总页数
+        
+        Args:
+            characters: 字符列表
+            page_width: 页面宽度
+            page_height: 页面高度
+            
+        Returns:
+            总页数
+        """
+        if not characters:
+            return 1
+        
+        _, max_rows_per_page = self._calculate_layout(page_width, page_height)
+        chars_per_page = max_rows_per_page
+        
+        return max(1, (len(characters) + chars_per_page - 1) // chars_per_page)
+    
+    def generate_all_pages(self, characters: List[str], grid_type: str,
+                           page_width: int, page_height: int) -> List[Image.Image]:
+        """
+        生成所有页面的图像（用于PDF导出）
+        
+        Args:
+            characters: 字符列表
+            grid_type: 格子类型
+            page_width: 页面宽度
+            page_height: 页面高度
+            
+        Returns:
+            PIL Image对象列表，每个元素是一页
+        """
+        pages = []
+        total_chars = len(characters)
+        char_index = 0
+        
+        while total_chars == 0 or char_index < total_chars:
+            img, next_char_index = self._generate_page_image(characters, char_index, grid_type, page_width, page_height)
+            pages.append(img)
+            
+            if total_chars == 0:
+                break
+            
+            if next_char_index >= total_chars:
+                break
+            char_index = next_char_index
+        
+        return pages
+    
+    @staticmethod
+    def filter_valid_characters(text: str) -> List[str]:
+        """
+        过滤有效字符（用于预览生成）
+        
+        Args:
+            text: 输入的原始文本
+            
+        Returns:
+            有效字符列表（只包含中文、英文、数字）
+        """
+        valid_chars = []
+        
+        for char in text:
+            if re.match(r'^[\u4e00-\u9fff\u3400-\u4dbf]$', char):
+                valid_chars.append(char)
+            elif re.match(r'^[a-zA-Z0-9]$', char):
+                valid_chars.append(char)
+        
+        return valid_chars
+    
+    @staticmethod
+    def is_allowed_character(char: str) -> bool:
+        """
+        检查字符是否允许输入
+        
+        允许的字符：
+        - 中文：\u4e00-\u9fff, \u3400-\u4dbf
+        - 英文：a-z, A-Z
+        - 数字：0-9
+        - 空格和换行（不占格但允许输入）
+        
+        Args:
+            char: 要检查的字符
+            
+        Returns:
+            是否允许输入
+        """
+        if re.match(r'^[\u4e00-\u9fff\u3400-\u4dbf]$', char):
+            return True
+        
+        if re.match(r'^[a-zA-Z0-9\s\n]$', char):
+            return True
+        
+        return False
+    
+    @staticmethod
+    def clean_input_text(text: str) -> str:
+        """
+        清理输入文本，移除不允许的字符
+        
+        Args:
+            text: 原始输入文本
+            
+        Returns:
+            清理后的文本
+        """
+        cleaned = []
+        for char in text:
+            if CopybookPreview.is_allowed_character(char):
+                cleaned.append(char)
+        return ''.join(cleaned)
 
 
 class StrokeType:
@@ -1049,6 +1367,8 @@ class CopybookGenerator:
                  font_path: Optional[str] = None,
                  grid_type: str = "mizi",
                  font_style: str = "zhenkai",
+                 grid_size_cm: float = DEFAULT_GRID_SIZE_CM,
+                 lines_per_char: int = DEFAULT_LINES_PER_CHAR,
                  student_name: str = "",
                  student_id: str = "",
                  class_name: str = ""):
@@ -1063,6 +1383,8 @@ class CopybookGenerator:
             font_path: 字体文件路径，默认使用系统字体
             grid_type: 格子类型，"mizi" 表示米字格（默认），"tianzi" 表示田字格
             font_style: 字体样式，"zhenkai" 表示正楷（默认），"xingkai" 表示行楷
+            grid_size_cm: 格子大小（厘米），默认2.0cm
+            lines_per_char: 每个字的行数，默认1行
             student_name: 学生姓名
             student_id: 学号
             class_name: 班级
@@ -1074,14 +1396,16 @@ class CopybookGenerator:
         
         self.grid_type = grid_type
         self.font_style = font_style
+        self.grid_size_cm = grid_size_cm
+        self.lines_per_char = max(1, min(50, lines_per_char))
         
-        self.student_name = student_name
-        self.student_id = student_id
-        self.class_name = class_name
+        self.student_name = student_name or ""
+        self.student_id = student_id or ""
+        self.class_name = class_name or ""
         
         self.margin_left = 20 * mm
         self.margin_right = 20 * mm
-        self.margin_top = 40 * mm
+        self.margin_top = 30 * mm
         self.margin_bottom = 20 * mm
         
         self._init_font(font_path)
@@ -1216,12 +1540,16 @@ class CopybookGenerator:
         usable_width = self.paper_width - self.margin_left - self.margin_right
         usable_height = self.paper_height - self.margin_top - self.margin_bottom
         
-        self.grid_size = min(
-            usable_width / self.grid_cols,
-            usable_height / self.grid_rows
-        )
+        self.grid_size = self.grid_size_cm * 10 * mm
         
-        self.grid_padding = (usable_width - self.grid_size * self.grid_cols) / 2
+        border_width = usable_width * BORDER_RATIO
+        actual_usable_width = usable_width - 2 * border_width
+        
+        self.grid_cols = max(1, int(actual_usable_width / self.grid_size))
+        self.grid_rows = max(1, int(usable_height / self.grid_size))
+        
+        actual_used_width = self.grid_size * self.grid_cols
+        self.grid_padding = (actual_usable_width - actual_used_width) / 2 + border_width
     
     def _load_stroke_data(self):
         """加载笔画数据"""
@@ -2309,37 +2637,131 @@ class CopybookGenerator:
         Args:
             c: PDF画布对象
         """
+        c.setFont("Helvetica", 10)
+        c.setFillColor(black)
+        
+        info_parts = []
+        if self.student_name:
+            info_parts.append(f"姓名：{self.student_name}")
+        else:
+            info_parts.append("姓名：______")
+        
+        if self.student_id:
+            info_parts.append(f"学号：{self.student_id}")
+        else:
+            info_parts.append("学号：______")
+        
+        if self.class_name:
+            info_parts.append(f"班级：{self.class_name}")
+        else:
+            info_parts.append("班级：______")
+        
+        info_text = "  ".join(info_parts)
+        text_width = c.stringWidth(info_text, "Helvetica", 10)
+        
+        header_x = self.paper_width - self.margin_right - text_width
         header_y = self.paper_height - 15 * mm
         
-        info_items = []
-        if self.student_name:
-            info_items.append(f"姓名：{self.student_name}")
-        if self.class_name:
-            info_items.append(f"班级：{self.class_name}")
-        if self.student_id:
-            info_items.append(f"学号：{self.student_id}")
+        c.drawString(header_x, header_y, info_text)
+    
+    def _draw_page_from_chars(self, c: canvas.Canvas, characters: List[str], 
+                               start_char_index: int, page_num: int) -> int:
+        """
+        从字符列表绘制单页字帖
         
-        if info_items:
-            c.setFont(self.font_name, 12)
-            c.setFillColor(black)
+        Args:
+            c: PDF画布对象
+            characters: 字符列表
+            start_char_index: 起始字符索引
+            page_num: 页码
             
-            x = self.margin_left
-            for item in info_items:
-                c.drawString(x, header_y, item)
-                text_width = c.stringWidth(item, self.font_name, 12)
-                x += text_width + 30 * mm
+        Returns:
+            下一页起始字符索引
+        """
+        self._draw_header(c)
+        
+        row_index = 0
+        char_index = start_char_index
+        total_chars = len(characters)
+        
+        while char_index < total_chars and row_index < self.grid_rows:
+            current_char = characters[char_index]
+            
+            for line_repeat in range(self.lines_per_char):
+                if row_index >= self.grid_rows:
+                    break
+                
+                for col in range(self.grid_cols):
+                    x = self.margin_left + self.grid_padding + col * self.grid_size
+                    y = self.paper_height - self.margin_top - (row_index + 1) * self.grid_size
+                    
+                    is_template = (col == 0)
+                    
+                    self._draw_grid(c, x, y,
+                                   is_stroke_demo=is_template,
+                                   is_highlight=is_template,
+                                   character=current_char if is_template else "")
+                
+                row_index += 1
+            
+            char_index += 1
+        
+        if char_index >= total_chars:
+            while row_index < self.grid_rows:
+                for col in range(self.grid_cols):
+                    x = self.margin_left + self.grid_padding + col * self.grid_size
+                    y = self.paper_height - self.margin_top - (row_index + 1) * self.grid_size
+                    self._draw_grid(c, x, y)
+                row_index += 1
+        
+        c.setFont("Helvetica", 10)
+        c.setFillColor(gray)
+        footer_text = f"第 {page_num} 页"
+        c.drawString(self.margin_left, 10 * mm, footer_text)
+        
+        return char_index
+    
+    def generate_from_chars(self, characters: List[str], output_path: str) -> Tuple[bool, str]:
+        """
+        从字符列表生成字帖
+        
+        Args:
+            characters: 要生成的字符列表
+            output_path: 输出PDF文件路径
+            
+        Returns:
+            Tuple[bool, str]: (是否成功, 错误信息)
+        """
+        if not characters:
+            return False, "字符列表不能为空"
+        
+        try:
+            c = canvas.Canvas(output_path, pagesize=(self.paper_width, self.paper_height))
+            
+            char_index = 0
+            page_num = 1
+            total_chars = len(characters)
+            
+            while char_index < total_chars:
+                char_index = self._draw_page_from_chars(c, characters, char_index, page_num)
+                c.showPage()
+                page_num += 1
+            
+            c.save()
+            return True, f"字帖已成功生成：{output_path}"
+            
+        except Exception as e:
+            return False, f"生成字帖时发生错误：{str(e)}"
     
     def _draw_page(self, c: canvas.Canvas, character: str, page_num: int):
         """
-        绘制单页字帖
+        绘制单页字帖（单个字符版本，向后兼容）
         
         Args:
             c: PDF画布对象
             character: 汉字
             page_num: 页码
         """
-        self._draw_header(c)
-        
         for row in range(self.grid_rows):
             for col in range(self.grid_cols):
                 x = self.margin_left + self.grid_padding + col * self.grid_size
@@ -2357,47 +2779,10 @@ class CopybookGenerator:
         footer_text = f"第 {page_num} 页"
         c.drawString(self.margin_left, 10 * mm, footer_text)
     
-    def _draw_page_from_chars(self, c: canvas.Canvas, chars_on_page: List[str], 
-                                start_row: int, page_num: int):
-        """
-        按预览方式绘制单页字帖（每行一个不同的字符）
-        
-        Args:
-            c: PDF画布对象
-            chars_on_page: 本页要绘制的字符列表
-            start_row: 起始行号（在整个文档中的位置，用于计算当前字符在列表中的索引）
-            page_num: 页码
-        """
-        self._draw_header(c)
-        
-        for row_in_page in range(self.grid_rows):
-            char_index = start_row + row_in_page
-            if char_index < len(chars_on_page):
-                current_char = chars_on_page[char_index]
-            else:
-                current_char = ""
-            
-            for col in range(self.grid_cols):
-                x = self.margin_left + self.grid_padding + col * self.grid_size
-                y = self.paper_height - self.margin_top - (row_in_page + 1) * self.grid_size
-                
-                is_template = (col == 0) and (current_char != "")
-                char_to_draw = current_char if is_template else ""
-                
-                self._draw_grid(c, x, y, 
-                               is_stroke_demo=is_template,
-                               is_highlight=is_template,
-                               character=char_to_draw)
-        
-        c.setFont("Helvetica", 10)
-        c.setFillColor(gray)
-        footer_text = f"第 {page_num} 页"
-        c.drawString(self.margin_left, 10 * mm, footer_text)
-    
     def generate(self, character: str, output_path: str, 
                  num_pages: int = 1) -> Tuple[bool, str]:
         """
-        生成字帖（旧方式：单字重复）
+        生成字帖
         
         Args:
             character: 要生成的汉字
@@ -2416,43 +2801,6 @@ class CopybookGenerator:
             
             for page_num in range(1, num_pages + 1):
                 self._draw_page(c, character, page_num)
-                c.showPage()
-            
-            c.save()
-            return True, f"字帖已成功生成：{output_path}"
-            
-        except Exception as e:
-            return False, f"生成字帖时发生错误：{str(e)}"
-    
-    def generate_from_chars(self, characters: List[str], output_path: str) -> Tuple[bool, str]:
-        """
-        按预览方式生成字帖（每行一个不同的字符）
-        
-        Args:
-            characters: 要生成的字符列表
-            output_path: 输出PDF文件路径
-            
-        Returns:
-            Tuple[bool, str]: (是否成功, 错误信息)
-        """
-        if not characters:
-            return False, "没有可生成的字符"
-        
-        for char in characters:
-            is_valid, error_msg = self.validate_input(char)
-            if not is_valid:
-                return False, error_msg
-        
-        try:
-            c = canvas.Canvas(output_path, pagesize=(self.paper_width, self.paper_height))
-            
-            total_chars = len(characters)
-            chars_per_page = self.grid_rows
-            total_pages = (total_chars + chars_per_page - 1) // chars_per_page
-            
-            for page_num in range(1, total_pages + 1):
-                start_row = (page_num - 1) * chars_per_page
-                self._draw_page_from_chars(c, characters, start_row, page_num)
                 c.showPage()
             
             c.save()
