@@ -218,7 +218,7 @@ function CopybookEditor({ config, onConfigChange }) {
       const line3Y = y + pinyinGridHeight * 0.75
       const line4Y = charGridY
 
-      if (isTemplate && pinyin) {
+      if (pinyin) {
         const pinyinFontSize = Math.max(10, Math.floor(pinyinGridHeight * 0.5))
         ctx.font = `${pinyinFontSize}px sans-serif`
         ctx.textAlign = 'center'
