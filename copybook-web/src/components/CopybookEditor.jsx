@@ -10,6 +10,7 @@ const GridType = {
 
 const DEFAULT_GRID_COLOR = '#000000'
 const DEFAULT_FONT_COLOR = '#000000'
+const DEFAULT_PINYIN_COLOR = '#000000'
 
 const PageSize = {
   A4: { name: 'A4', width: 210, height: 297 },
@@ -56,6 +57,9 @@ function CopybookEditor({ config, onConfigChange }) {
     safeConfig.lines_per_char ? Math.max(1, Math.min(50, parseInt(safeConfig.lines_per_char, 10))) : DEFAULT_LINES_PER_CHAR
   )
   const [showPinyin, setShowPinyin] = useState(safeConfig.show_pinyin ?? DEFAULT_SHOW_PINYIN)
+  const [pinyinColor, setPinyinColor] = useState(
+    /^#[0-9A-Fa-f]{6}$/.test(safeConfig.pinyin_color) ? safeConfig.pinyin_color : DEFAULT_PINYIN_COLOR
+  )
   const [fontStyle, setFontStyle] = useState(safeConfig.font_style ?? 'zhenkai')
   const [fontColor, setFontColor] = useState(
     /^#[0-9A-Fa-f]{6}$/.test(safeConfig.font_color) ? safeConfig.font_color : DEFAULT_FONT_COLOR
@@ -96,7 +100,6 @@ function CopybookEditor({ config, onConfigChange }) {
 
   useEffect(() => {
     if (config && typeof config === 'object') {
-      setInputText(String(config.input_text ?? ''))
       setGridType(config.grid_type ?? GridType.TIANZI)
       setGridColor(/^#[0-9A-Fa-f]{6}$/.test(config.grid_color) ? config.grid_color : DEFAULT_GRID_COLOR)
       setGridSizeCm(config.grid_size_cm ?? DEFAULT_GRID_SIZE_CM)
@@ -106,6 +109,7 @@ function CopybookEditor({ config, onConfigChange }) {
           : DEFAULT_LINES_PER_CHAR
       )
       setShowPinyin(config.show_pinyin ?? DEFAULT_SHOW_PINYIN)
+      setPinyinColor(/^#[0-9A-Fa-f]{6}$/.test(config.pinyin_color) ? config.pinyin_color : DEFAULT_PINYIN_COLOR)
       setFontStyle(config.font_style ?? 'zhenkai')
       setFontColor(/^#[0-9A-Fa-f]{6}$/.test(config.font_color) ? config.font_color : DEFAULT_FONT_COLOR)
       setStudentName(String(config.student_name ?? ''))
@@ -132,13 +136,13 @@ function CopybookEditor({ config, onConfigChange }) {
           : DEFAULT_LINES_PER_CHAR
       )
       setShowPinyin(configData.show_pinyin ?? DEFAULT_SHOW_PINYIN)
+      setPinyinColor(/^#[0-9A-Fa-f]{6}$/.test(configData.pinyin_color) ? configData.pinyin_color : DEFAULT_PINYIN_COLOR)
       setFontStyle(configData.font_style ?? 'zhenkai')
       setFontColor(/^#[0-9A-Fa-f]{6}$/.test(configData.font_color) ? configData.font_color : DEFAULT_FONT_COLOR)
       setStudentName(String(configData.student_name ?? ''))
       setStudentId(String(configData.student_id ?? ''))
       setClassName(String(configData.class_name ?? ''))
       setPageSize(configData.page_size ?? DEFAULT_PAGE_SIZE)
-      setInputText(String(configData.input_text ?? ''))
       setCurrentPage(0)
       alert('模版已应用')
     }
@@ -153,6 +157,7 @@ function CopybookEditor({ config, onConfigChange }) {
       grid_size_cm: gridSizeCm,
       lines_per_char: linesPerChar,
       show_pinyin: showPinyin,
+      pinyin_color: pinyinColor,
       font_style: fontStyle,
       font_color: fontColor,
       student_name: studentName,
@@ -163,7 +168,7 @@ function CopybookEditor({ config, onConfigChange }) {
     if (onConfigChange) {
       onConfigChange(newConfig)
     }
-  }, [inputText, gridType, gridColor, gridSizeCm, linesPerChar, showPinyin, fontStyle, fontColor, studentName, studentId, className, pageSize, onConfigChange])
+  }, [inputText, gridType, gridColor, gridSizeCm, linesPerChar, showPinyin, pinyinColor, fontStyle, fontColor, studentName, studentId, className, pageSize, onConfigChange])
 
   const hexToRgba = (hex, alpha) => {
     const validHex = /^#[0-9A-Fa-f]{6}$/.test(hex) ? hex : DEFAULT_GRID_COLOR
@@ -173,7 +178,7 @@ function CopybookEditor({ config, onConfigChange }) {
     return `rgba(${r}, ${g}, ${b}, ${alpha})`
   }
 
-  const drawGrid = useCallback((ctx, x, y, size, type, color, character = '', isTemplate = false, pinyin = '', showPinyin = false, fontColor = DEFAULT_FONT_COLOR) => {
+  const drawGrid = useCallback((ctx, x, y, size, type, color, character = '', isTemplate = false, pinyin = '', showPinyin = false, fontColor = DEFAULT_FONT_COLOR, pinyinColor = DEFAULT_PINYIN_COLOR) => {
     const drawDashedLine = (ctx, x1, y1, x2, y2, dashLength = 5) => {
       const dx = x2 - x1
       const dy = y2 - y1
@@ -223,7 +228,7 @@ function CopybookEditor({ config, onConfigChange }) {
         ctx.font = `${pinyinFontSize}px sans-serif`
         ctx.textAlign = 'center'
         ctx.textBaseline = 'middle'
-        ctx.fillStyle = '#666666'
+        ctx.fillStyle = pinyinColor
         ctx.fillText(pinyin, x + size / 2, line2Y + (line3Y - line2Y) / 2)
       }
 
@@ -568,7 +573,7 @@ function CopybookEditor({ config, onConfigChange }) {
           const isTemplate = col === 0
           const charToDraw = isTemplate ? currentChar : ''
 
-          drawGrid(ctx, x, y, previewCellSize, gridType, gridColor, charToDraw, isTemplate, charPinyin, showPinyin, fontColor)
+          drawGrid(ctx, x, y, previewCellSize, gridType, gridColor, charToDraw, isTemplate, charPinyin, showPinyin, fontColor, pinyinColor)
         }
         rowIndex++
         linesOffset++
@@ -590,7 +595,7 @@ function CopybookEditor({ config, onConfigChange }) {
     }
 
     ctx.restore()
-  }, [validChars, gridType, gridColor, drawGrid, pageSize, studentName, studentId, className, gridSizeCm, linesPerChar, currentPage, pinyinData, showPinyin, fontColor, calculatePageInfo])
+  }, [validChars, gridType, gridColor, drawGrid, pageSize, studentName, studentId, className, gridSizeCm, linesPerChar, currentPage, pinyinData, showPinyin, fontColor, pinyinColor, calculatePageInfo])
 
   useEffect(() => {
     if (currentPage >= totalPages && totalPages > 0) {
@@ -642,6 +647,7 @@ function CopybookEditor({ config, onConfigChange }) {
           grid_size_cm: gridSizeCm,
           lines_per_char: linesPerChar,
           show_pinyin: showPinyin,
+          pinyin_color: pinyinColor,
           font_style: fontStyle,
           font_color: fontColor,
           grid_size: gridSize,
@@ -649,7 +655,6 @@ function CopybookEditor({ config, onConfigChange }) {
           student_id: studentId,
           class_name: className,
           page_size: pageSize,
-          input_text: inputText,
         },
       }
       await templateApi.create(templateData)
@@ -687,6 +692,7 @@ function CopybookEditor({ config, onConfigChange }) {
         grid_size_cm: gridSizeCm,
         lines_per_char: linesPerChar,
         show_pinyin: showPinyin,
+        pinyin_color: pinyinColor,
         font_style: fontStyle,
         font_color: fontColor,
         student_name: studentName,
@@ -867,6 +873,37 @@ function CopybookEditor({ config, onConfigChange }) {
               <span className="checkbox-text">显示拼音（开启后在字帖预览中显示）</span>
             </label>
           </div>
+
+          {showPinyin && (
+            <div className="form-group">
+              <h3 className="section-title" style={{ marginTop: '12px', marginBottom: '8px' }}>拼音颜色</h3>
+              <div className="color-input-row">
+                <input
+                  type="color"
+                  className="color-picker-input"
+                  value={pinyinColor}
+                  onChange={(e) => setPinyinColor(e.target.value)}
+                />
+                <input
+                  type="text"
+                  className="form-input color-hex-input"
+                  value={pinyinColor}
+                  onChange={(e) => {
+                    const val = e.target.value
+                    if (/^#[0-9A-Fa-f]{0,6}$/.test(val)) {
+                      setPinyinColor(val.length === 7 ? val : pinyinColor)
+                    }
+                  }}
+                  onBlur={(e) => {
+                    const val = e.target.value
+                    if (/^#[0-9A-Fa-f]{6}$/.test(val)) {
+                      setPinyinColor(val)
+                    }
+                  }}
+                />
+              </div>
+            </div>
+          )}
 
           <h3 className="section-title" style={{ marginTop: '16px' }}>格子颜色</h3>
           <div className="form-group">

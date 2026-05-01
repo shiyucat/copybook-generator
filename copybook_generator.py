@@ -46,6 +46,7 @@ DEFAULT_LINES_PER_CHAR = 1
 DEFAULT_SHOW_PINYIN = False
 BORDER_RATIO = 0.1
 DEFAULT_FONT_COLOR = (0.0, 0.0, 0.0)
+DEFAULT_PINYIN_COLOR = (0.0, 0.0, 0.0)
 
 try:
     from PIL import Image, ImageDraw, ImageFont
@@ -1375,6 +1376,7 @@ class CopybookGenerator:
                  grid_type: str = "mizi",
                  font_style: str = "zhenkai",
                  font_color: Tuple[float, float, float] = DEFAULT_FONT_COLOR,
+                 pinyin_color: Tuple[float, float, float] = DEFAULT_PINYIN_COLOR,
                  grid_size_cm: float = DEFAULT_GRID_SIZE_CM,
                  lines_per_char: int = DEFAULT_LINES_PER_CHAR,
                  show_pinyin: bool = DEFAULT_SHOW_PINYIN,
@@ -1393,6 +1395,7 @@ class CopybookGenerator:
             grid_type: 格子类型，"mizi" 表示米字格（默认），"tianzi" 表示田字格
             font_style: 字体样式，"zhenkai" 表示正楷（默认），"xingkai" 表示行楷
             font_color: 字体颜色（RGB元组，值为0.0-1.0），默认黑色
+            pinyin_color: 拼音颜色（RGB元组，值为0.0-1.0），默认黑色
             grid_size_cm: 格子大小（厘米），默认2.0cm
             lines_per_char: 每个字的行数，默认1行
             show_pinyin: 是否显示拼音，默认False
@@ -1408,6 +1411,7 @@ class CopybookGenerator:
         self.grid_type = grid_type
         self.font_style = font_style
         self.font_color = font_color
+        self.pinyin_color = pinyin_color
         self.grid_size_cm = grid_size_cm
         self.lines_per_char = max(1, min(50, lines_per_char))
         self.show_pinyin = show_pinyin
@@ -2674,7 +2678,7 @@ class CopybookGenerator:
             
             if pinyin_text:
                 pinyin_font_size = int(pinyin_grid_height * 0.5)
-                c.setFillColor(Color(0.4, 0.4, 0.4))
+                c.setFillColor(Color(self.pinyin_color[0], self.pinyin_color[1], self.pinyin_color[2]))
                 c.setFont(self.font_name, pinyin_font_size)
                 
                 pinyin_width = c.stringWidth(pinyin_text, self.font_name, pinyin_font_size)

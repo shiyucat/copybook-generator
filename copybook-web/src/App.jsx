@@ -12,6 +12,7 @@ const DEFAULT_CONFIG = {
   grid_size_cm: 2.0,
   lines_per_char: 1,
   show_pinyin: false,
+  pinyin_color: '#000000',
   font_style: 'zhenkai',
   font_color: '#000000',
   student_name: '',
@@ -31,14 +32,14 @@ function App() {
   const handleApplyTemplate = useCallback((templateConfig) => {
     const safeConfig = templateConfig && typeof templateConfig === 'object' ? templateConfig : {}
     const mergedConfig = {
-      ...DEFAULT_CONFIG,
-      input_text: safeConfig.input_text ?? DEFAULT_CONFIG.input_text,
+      ...currentConfig,
       grid_type: safeConfig.grid_type ?? DEFAULT_CONFIG.grid_type,
       grid_color: safeConfig.grid_color ?? DEFAULT_CONFIG.grid_color,
       grid_size: safeConfig.grid_size ?? DEFAULT_CONFIG.grid_size,
       grid_size_cm: safeConfig.grid_size_cm ?? DEFAULT_CONFIG.grid_size_cm,
       lines_per_char: safeConfig.lines_per_char ?? DEFAULT_CONFIG.lines_per_char,
       show_pinyin: safeConfig.show_pinyin ?? DEFAULT_CONFIG.show_pinyin,
+      pinyin_color: safeConfig.pinyin_color ?? DEFAULT_CONFIG.pinyin_color,
       font_style: safeConfig.font_style ?? DEFAULT_CONFIG.font_style,
       font_color: safeConfig.font_color ?? DEFAULT_CONFIG.font_color,
       student_name: String(safeConfig.student_name ?? DEFAULT_CONFIG.student_name),
@@ -49,7 +50,7 @@ function App() {
     setCurrentConfig(mergedConfig)
     setActivePage('editor')
     alert('模版已应用')
-  }, [])
+  }, [currentConfig])
 
   return (
     <div className="app">

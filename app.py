@@ -490,6 +490,11 @@ def export_pdf():
             font_color_hex = '#000000'
         font_color = hex_to_rgb(font_color_hex)
         
+        pinyin_color_hex = data.get('pinyin_color', '#000000')
+        if not isinstance(pinyin_color_hex, str) or not re.match(r'^#[0-9A-Fa-f]{6}$', pinyin_color_hex):
+            pinyin_color_hex = '#000000'
+        pinyin_color = hex_to_rgb(pinyin_color_hex)
+        
         import tempfile
         with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as tmp:
             output_path = tmp.name
@@ -500,6 +505,7 @@ def export_pdf():
                 grid_type=grid_type_code,
                 font_style=font_style,
                 font_color=font_color,
+                pinyin_color=pinyin_color,
                 grid_size_cm=grid_size_cm,
                 lines_per_char=lines_per_char,
                 show_pinyin=show_pinyin,
