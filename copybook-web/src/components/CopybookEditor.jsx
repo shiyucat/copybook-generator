@@ -34,7 +34,7 @@ const DEFAULT_SHOW_PINYIN = false
 const PRINT_CONFIG = {
   MARGIN_LEFT_MM: 20,
   MARGIN_RIGHT_MM: 20,
-  MARGIN_TOP_MM: 40,
+  MARGIN_TOP_MM: 30,
   MARGIN_BOTTOM_MM: 20,
   HEADER_HEIGHT_MM: 10,
   GRID_COLS: 5,
@@ -133,6 +133,7 @@ function CopybookEditor({ config, onConfigChange }) {
       setClassName(String(configData.class_name ?? ''))
       setPageSize(configData.page_size ?? DEFAULT_PAGE_SIZE)
       setInputText(String(configData.input_text ?? ''))
+      setCurrentPage(0)
       alert('模版已应用')
     }
   }, [templates])
