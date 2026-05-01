@@ -239,6 +239,55 @@ class TemplateDatabase:
         
         return [Template.from_dict(dict(row)) for row in rows]
     
+    def get_templates_paginated(self, page: int = 1, page_size: int = 10) -> Dict[str, Any]:
+        """
+        分页获取模版
+        
+        Args:
+            page: 页码，从1开始
+            page_size: 每页数量
+            
+        Returns:
+            包含分页信息的字典：{
+                "templates": [Template...],
+                "total": 总数,
+                "page": 当前页码,
+                "page_size": 每页数量,
+                "total_pages": 总页数
+            }
+        """
+        page = max(1, page)
+        page_size = max(1, min(100, page_size))
+        
+        total = self.get_template_count()
+        
+        total_pages = (total + page_size - 1) // page_size if total > 0 else 1
+        
+        offset = (page - 1) * page_size
+        
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT id as template_id, template_name, config_data, created_at, updated_at
+            FROM templates 
+            ORDER BY created_at DESC
+            LIMIT ? OFFSET ?
+        """, (page_size, offset))
+        
+        rows = cursor.fetchall()
+        conn.close()
+        
+        templates = [Template.from_dict(dict(row)) for row in rows]
+        
+        return {
+            "templates": templates,
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "total_pages": total_pages
+        }
+    
     def delete_template(self, template_id: int) -> bool:
         """
         删除模版

@@ -14,7 +14,13 @@ from flask import Flask, jsonify, request, make_response
 from flask_cors import CORS
 from pathlib import Path
 
-from pypinyin import pinyin, Style
+try:
+    from pypinyin import pinyin, Style
+    PINYIN_AVAILABLE = True
+except ImportError:
+    PINYIN_AVAILABLE = False
+    pinyin = None
+    Style = None
 
 from database import TemplateDatabase, Template
 from copybook_generator import (
@@ -36,29 +42,65 @@ db = TemplateDatabase()
 @app.route('/api/templates', methods=['GET'])
 def get_templates():
     """
-    获取所有模版列表
+    获取模版列表（支持分页）
+    
+    Query Parameters:
+        page: 页码（从1开始，可选，不传则返回所有）
+        page_size: 每页数量（可选，默认10，可选值：10,20,40,100）
     
     Returns:
         JSON 格式的模版列表
     """
     try:
-        templates = db.get_all_templates()
+        page = request.args.get('page', type=int)
+        page_size = request.args.get('page_size', 10, type=int)
         
-        result = []
-        for template in templates:
-            result.append({
-                'template_id': template.template_id,
-                'template_name': template.template_name,
-                'config_data': template.config_data,
-                'created_at': template.created_at,
-                'updated_at': template.updated_at
+        if page is not None and page > 0:
+            page_size = max(10, min(100, page_size))
+            if page_size not in [10, 20, 40, 100]:
+                page_size = 10
+            
+            paginated = db.get_templates_paginated(page=page, page_size=page_size)
+            
+            result = []
+            for template in paginated['templates']:
+                result.append({
+                    'template_id': template.template_id,
+                    'template_name': template.template_name,
+                    'config_data': template.config_data,
+                    'created_at': template.created_at,
+                    'updated_at': template.updated_at
+                })
+            
+            return jsonify({
+                'success': True,
+                'data': result,
+                'count': len(result),
+                'pagination': {
+                    'page': paginated['page'],
+                    'page_size': paginated['page_size'],
+                    'total': paginated['total'],
+                    'total_pages': paginated['total_pages']
+                }
             })
-        
-        return jsonify({
-            'success': True,
-            'data': result,
-            'count': len(result)
-        })
+        else:
+            templates = db.get_all_templates()
+            
+            result = []
+            for template in templates:
+                result.append({
+                    'template_id': template.template_id,
+                    'template_name': template.template_name,
+                    'config_data': template.config_data,
+                    'created_at': template.created_at,
+                    'updated_at': template.updated_at
+                })
+            
+            return jsonify({
+                'success': True,
+                'data': result,
+                'count': len(result)
+            })
     except Exception as e:
         return jsonify({
             'success': False,
@@ -495,6 +537,12 @@ def get_pinyin():
             }
         }
     """
+    if not PINYIN_AVAILABLE:
+        return jsonify({
+            'success': False,
+            'error': '拼音功能不可用，请安装 pypinyin：pip install pypinyin'
+        }), 500
+    
     try:
         data = request.get_json()
         
