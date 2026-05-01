@@ -2672,7 +2672,7 @@ class CopybookGenerator:
             line_3_y = pinyin_grid_top - pinyin_grid_height * 0.75
             line_4_y = pinyin_grid_bottom
             
-            if is_stroke_demo and pinyin_text:
+            if pinyin_text:
                 pinyin_font_size = int(pinyin_grid_height * 0.5)
                 c.setFillColor(Color(0.4, 0.4, 0.4))
                 c.setFont(self.font_name, pinyin_font_size)

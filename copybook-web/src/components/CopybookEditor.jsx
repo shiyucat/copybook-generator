@@ -218,7 +218,7 @@ function CopybookEditor({ config, onConfigChange }) {
       const line3Y = y + pinyinGridHeight * 0.75
       const line4Y = charGridY
 
-      if (isTemplate && pinyin) {
+      if (pinyin) {
         const pinyinFontSize = Math.max(10, Math.floor(pinyinGridHeight * 0.5))
         ctx.font = `${pinyinFontSize}px sans-serif`
         ctx.textAlign = 'center'
@@ -541,7 +541,7 @@ function CopybookEditor({ config, onConfigChange }) {
         for (let col = 0; col < cols; col++) {
           const x = offsetX + previewMarginLeft + previewGridPadding + col * previewCellSize
           const y = offsetY + mmToPx(marginTopMm + row * cellSizeMm)
-          drawGrid(ctx, x, y, previewCellSize, gridType, gridColor, '', false, '', showPinyin)
+          drawGrid(ctx, x, y, previewCellSize, gridType, gridColor)
         }
       }
       ctx.restore()
@@ -584,7 +584,7 @@ function CopybookEditor({ config, onConfigChange }) {
       for (let col = 0; col < cols; col++) {
         const x = offsetX + previewMarginLeft + previewGridPadding + col * previewCellSize
         const y = offsetY + mmToPx(marginTopMm + rowIndex * cellSizeMm)
-        drawGrid(ctx, x, y, previewCellSize, gridType, gridColor, '', false, '', showPinyin)
+        drawGrid(ctx, x, y, previewCellSize, gridType, gridColor)
       }
       rowIndex++
     }
