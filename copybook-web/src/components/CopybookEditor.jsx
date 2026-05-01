@@ -19,6 +19,16 @@ const PageSize = {
 
 const DEFAULT_PAGE_SIZE = 'A4'
 
+const PRINT_CONFIG = {
+  MARGIN_LEFT_MM: 20,
+  MARGIN_RIGHT_MM: 20,
+  MARGIN_TOP_MM: 40,
+  MARGIN_BOTTOM_MM: 20,
+  HEADER_HEIGHT_MM: 10,
+  GRID_COLS: 5,
+  GRID_ROWS: 10,
+}
+
 function CopybookEditor({ config, onConfigChange }) {
   const canvasRef = useRef(null)
   const safeConfig = config && typeof config === 'object' ? config : {}
@@ -206,22 +216,65 @@ function CopybookEditor({ config, onConfigChange }) {
     if (!canvas) return
 
     const ctx = canvas.getContext('2d')
-    const width = canvas.width
-    const height = canvas.height
+    const canvasWidth = canvas.width
+    const canvasHeight = canvas.height
 
     ctx.fillStyle = '#ffffff'
-    ctx.fillRect(0, 0, width, height)
+    ctx.fillRect(0, 0, canvasWidth, canvasHeight)
 
-    const headerHeight = 30
-    const padding = 5
-    const size = gridSize
-    const gridPadding = 5
+    const currentPageSize = PageSize[pageSize] || PageSize.A4
+    const pageWidthMm = currentPageSize.width
+    const pageHeightMm = currentPageSize.height
 
-    const contentHeight = height - headerHeight - padding * 2
-    const cols = Math.max(1, Math.floor((width - padding * 2) / (size + gridPadding)))
-    const maxRows = Math.max(1, Math.floor(contentHeight / (size + gridPadding)))
+    const marginLeftMm = PRINT_CONFIG.MARGIN_LEFT_MM
+    const marginRightMm = PRINT_CONFIG.MARGIN_RIGHT_MM
+    const marginTopMm = PRINT_CONFIG.MARGIN_TOP_MM
+    const marginBottomMm = PRINT_CONFIG.MARGIN_BOTTOM_MM
 
-    ctx.font = '12px sans-serif'
+    const usableWidthMm = pageWidthMm - marginLeftMm - marginRightMm
+    const usableHeightMm = pageHeightMm - marginTopMm - marginBottomMm
+
+    const cols = PRINT_CONFIG.GRID_COLS
+    const maxRows = PRINT_CONFIG.GRID_ROWS
+
+    const cellSizeMm = Math.min(usableWidthMm / cols, usableHeightMm / maxRows)
+    const gridPaddingMm = (usableWidthMm - cellSizeMm * cols) / 2
+
+    const pageRatio = pageWidthMm / pageHeightMm
+    const canvasRatio = canvasWidth / canvasHeight
+
+    let scale
+    let offsetX = 0
+    let offsetY = 0
+
+    if (canvasRatio > pageRatio) {
+      scale = canvasHeight / pageHeightMm
+      offsetX = (canvasWidth - pageWidthMm * scale) / 2
+    } else {
+      scale = canvasWidth / pageWidthMm
+      offsetY = (canvasHeight - pageHeightMm * scale) / 2
+    }
+
+    const mmToPx = (mm) => mm * scale
+
+    const previewMarginLeft = mmToPx(marginLeftMm)
+    const previewMarginTop = mmToPx(marginTopMm)
+    const previewGridPadding = mmToPx(gridPaddingMm)
+    const previewCellSize = mmToPx(cellSizeMm)
+
+    ctx.save()
+    ctx.beginPath()
+    ctx.rect(offsetX, offsetY, mmToPx(pageWidthMm), mmToPx(pageHeightMm))
+    ctx.clip()
+
+    ctx.fillStyle = '#ffffff'
+    ctx.fillRect(offsetX, offsetY, mmToPx(pageWidthMm), mmToPx(pageHeightMm))
+
+    ctx.strokeStyle = '#e0e0e0'
+    ctx.lineWidth = 1
+    ctx.strokeRect(offsetX, offsetY, mmToPx(pageWidthMm), mmToPx(pageHeightMm))
+
+    ctx.font = `${Math.max(10, mmToPx(3.5))}px sans-serif`
     ctx.textAlign = 'right'
     ctx.textBaseline = 'middle'
     ctx.fillStyle = '#333'
@@ -232,23 +285,20 @@ function CopybookEditor({ config, onConfigChange }) {
     infoParts.push(`班级：${className || '______'}`)
 
     const infoText = infoParts.join('  ')
-    const x = width - padding
-    const y = headerHeight / 2
+    const headerX = offsetX + mmToPx(pageWidthMm - marginRightMm)
+    const headerY = offsetY + previewMarginTop / 2
 
-    ctx.fillText(infoText, x, y)
-
-    const contentTopY = headerHeight + padding
+    ctx.fillText(infoText, headerX, headerY)
 
     if (validChars.length === 0) {
       for (let row = 0; row < maxRows; row++) {
         for (let col = 0; col < cols; col++) {
-          const x = padding + col * (size + gridPadding)
-          const y = contentTopY + row * (size + gridPadding)
-          if (x + size <= width && y + size <= height) {
-            drawGrid(ctx, x, y, size, gridType, gridColor)
-          }
+          const x = offsetX + previewMarginLeft + previewGridPadding + col * previewCellSize
+          const y = offsetY + mmToPx(pageHeightMm - marginTopMm - (row + 1) * cellSizeMm)
+          drawGrid(ctx, x, y, previewCellSize, gridType, gridColor)
         }
       }
+      ctx.restore()
       return
     }
 
@@ -260,23 +310,21 @@ function CopybookEditor({ config, onConfigChange }) {
       const currentChar = validChars[charIndex]
 
       for (let col = 0; col < cols; col++) {
-        const x = padding + col * (size + gridPadding)
-        const y = contentTopY + rowIndex * (size + gridPadding)
-
-        if (x + size > width || y + size > height) {
-          continue
-        }
+        const x = offsetX + previewMarginLeft + previewGridPadding + col * previewCellSize
+        const y = offsetY + mmToPx(pageHeightMm - marginTopMm - (rowIndex + 1) * cellSizeMm)
 
         const isTemplate = col === 0
         const charToDraw = isTemplate ? currentChar : ''
 
-        drawGrid(ctx, x, y, size, gridType, gridColor, charToDraw, isTemplate)
+        drawGrid(ctx, x, y, previewCellSize, gridType, gridColor, charToDraw, isTemplate)
       }
 
       charIndex++
       rowIndex++
     }
-  }, [validChars, gridType, gridColor, drawGrid, gridSize, studentName, studentId, className])
+
+    ctx.restore()
+  }, [validChars, gridType, gridColor, drawGrid, pageSize, studentName, studentId, className])
 
   useEffect(() => {
     generatePreview()
@@ -539,26 +587,17 @@ function CopybookEditor({ config, onConfigChange }) {
         <div className="section">
           <h3 className="section-title">页面大小</h3>
           <div className="form-group">
-            <div className="radio-group">
+            <select
+              className="form-select"
+              value={pageSize}
+              onChange={(e) => setPageSize(e.target.value)}
+            >
               {Object.entries(PageSize).map(([key, size]) => (
-                <label key={key} className="radio-label">
-                  <input
-                    type="radio"
-                    name="pageSize"
-                    value={key}
-                    checked={pageSize === key}
-                    onChange={(e) => setPageSize(e.target.value)}
-                    className="radio-input"
-                  />
-                  <span className="radio-text">
-                    {size.name}
-                    <span className="radio-subtext">
-                      ({size.width}×{size.height}mm)
-                    </span>
-                  </span>
-                </label>
+                <option key={key} value={key}>
+                  {size.name} ({size.width}×{size.height}mm)
+                </option>
               ))}
-            </div>
+            </select>
           </div>
         </div>
 
