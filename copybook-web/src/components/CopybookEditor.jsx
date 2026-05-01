@@ -30,12 +30,6 @@ function CopybookEditor({ config, onConfigChange }) {
 
   const gridSize = 60
 
-  const presetColors = [
-    '#000000', '#333333', '#666666', '#999999',
-    '#dc3545', '#fd7e14', '#ffc107', '#28a745',
-    '#17a2b8', '#007bff', '#6f42c1', '#e83e8c',
-  ]
-
   const fetchTemplates = useCallback(async () => {
     setLoadingTemplates(true)
     try {
@@ -68,7 +62,8 @@ function CopybookEditor({ config, onConfigChange }) {
     setSelectedTemplateId(templateId)
     if (!templateId) return
 
-    const template = templates.find((t) => t.template_id === templateId)
+    const numericId = Number(templateId)
+    const template = templates.find((t) => t.template_id === numericId)
     if (template && template.config_data) {
       const configData = template.config_data
       setGridType(configData.grid_type || GridType.TIANZI)
@@ -480,46 +475,30 @@ function CopybookEditor({ config, onConfigChange }) {
 
           <h3 className="section-title" style={{ marginTop: '16px' }}>格子颜色</h3>
           <div className="form-group">
-            <div className="color-picker-container">
-              <div className="color-presets">
-                {presetColors.map((color) => (
-                  <button
-                    key={color}
-                    className={`color-swatch ${gridColor === color ? 'active' : ''}`}
-                    style={{ backgroundColor: color }}
-                    onClick={() => setGridColor(color)}
-                    title={color}
-                  />
-                ))}
-              </div>
-              <div className="color-custom">
-                <label className="form-label">自定义颜色</label>
-                <div className="color-input-row">
-                  <input
-                    type="color"
-                    className="color-picker-input"
-                    value={gridColor}
-                    onChange={(e) => setGridColor(e.target.value)}
-                  />
-                  <input
-                    type="text"
-                    className="form-input color-hex-input"
-                    value={gridColor}
-                    onChange={(e) => {
-                      const val = e.target.value
-                      if (/^#[0-9A-Fa-f]{0,6}$/.test(val)) {
-                        setGridColor(val.length === 7 ? val : gridColor)
-                      }
-                    }}
-                    onBlur={(e) => {
-                      const val = e.target.value
-                      if (/^#[0-9A-Fa-f]{6}$/.test(val)) {
-                        setGridColor(val)
-                      }
-                    }}
-                  />
-                </div>
-              </div>
+            <div className="color-input-row">
+              <input
+                type="color"
+                className="color-picker-input"
+                value={gridColor}
+                onChange={(e) => setGridColor(e.target.value)}
+              />
+              <input
+                type="text"
+                className="form-input color-hex-input"
+                value={gridColor}
+                onChange={(e) => {
+                  const val = e.target.value
+                  if (/^#[0-9A-Fa-f]{0,6}$/.test(val)) {
+                    setGridColor(val.length === 7 ? val : gridColor)
+                  }
+                }}
+                onBlur={(e) => {
+                  const val = e.target.value
+                  if (/^#[0-9A-Fa-f]{6}$/.test(val)) {
+                    setGridColor(val)
+                  }
+                }}
+              />
             </div>
           </div>
         </div>
