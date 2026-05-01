@@ -2603,16 +2603,18 @@ class CopybookGenerator:
         """
         grid_size = self.grid_size
         
+        char_font_size = int(grid_size * 0.7)
+        
         if character and (is_stroke_demo or is_highlight):
             c.setFillColor(Color(0.95, 0.95, 0.95))
             c.rect(x, y, grid_size, grid_size, fill=1, stroke=0)
             
             c.setFillColor(Color(0.7, 0.7, 0.7))
-            c.setFont(self.font_name, self.font_size)
+            c.setFont(self.font_name, char_font_size)
             
-            text_width = c.stringWidth(character, self.font_name, self.font_size)
+            text_width = c.stringWidth(character, self.font_name, char_font_size)
             text_x = x + (grid_size - text_width) / 2
-            text_y = y + (grid_size - self.font_size) / 2 + 5
+            text_y = y + (grid_size - char_font_size) / 2 + (char_font_size * 0.15)
             
             c.drawString(text_x, text_y, character)
         
@@ -2620,15 +2622,29 @@ class CopybookGenerator:
         c.setLineWidth(1)
         c.rect(x, y, grid_size, grid_size)
         
-        c.setStrokeColor(Color(0.8, 0.8, 0.8))
-        c.setLineWidth(0.5)
+        if self.grid_type == "tianzi":
+            c.setStrokeColor(Color(0.8, 0.8, 0.8))
+            c.setLineWidth(0.5)
+            c.line(x, y + grid_size/2, x + grid_size, y + grid_size/2)
+            c.line(x + grid_size/2, y, x + grid_size/2, y + grid_size)
         
-        c.line(x, y + grid_size/2, x + grid_size, y + grid_size/2)
-        c.line(x + grid_size/2, y, x + grid_size/2, y + grid_size)
-        
-        if self.grid_type == "mizi":
+        elif self.grid_type == "mizi":
+            c.setStrokeColor(Color(0.8, 0.8, 0.8))
+            c.setLineWidth(0.5)
+            c.line(x, y + grid_size/2, x + grid_size, y + grid_size/2)
+            c.line(x + grid_size/2, y, x + grid_size/2, y + grid_size)
             c.line(x, y, x + grid_size, y + grid_size)
             c.line(x + grid_size, y, x, y + grid_size)
+        
+        elif self.grid_type == "huigong":
+            inner_margin = grid_size / 5
+            c.setStrokeColor(Color(0.8, 0.8, 0.8))
+            c.setLineWidth(0.5)
+            c.rect(x + inner_margin, y + inner_margin, 
+                   grid_size - inner_margin * 2, grid_size - inner_margin * 2)
+        
+        elif self.grid_type == "fangge":
+            pass
     
     def _draw_header(self, c: canvas.Canvas):
         """
@@ -2637,9 +2653,6 @@ class CopybookGenerator:
         Args:
             c: PDF画布对象
         """
-        c.setFont("Helvetica", 10)
-        c.setFillColor(black)
-        
         info_parts = []
         if self.student_name:
             info_parts.append(f"姓名：{self.student_name}")
@@ -2657,7 +2670,15 @@ class CopybookGenerator:
             info_parts.append("班级：______")
         
         info_text = "  ".join(info_parts)
-        text_width = c.stringWidth(info_text, "Helvetica", 10)
+        
+        c.setFillColor(black)
+        
+        if self.font_name != "Helvetica":
+            c.setFont(self.font_name, 10)
+        else:
+            c.setFont("Helvetica", 10)
+        
+        text_width = c.stringWidth(info_text, self.font_name if self.font_name != "Helvetica" else "Helvetica", 10)
         
         header_x = self.paper_width - self.margin_right - text_width
         header_y = self.paper_height - 15 * mm

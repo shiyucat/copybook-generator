@@ -388,8 +388,14 @@ def export_pdf():
         grid_type = data.get('grid_type', '田字格')
         if grid_type in ['田字格', 'tianzi']:
             grid_type_code = 'tianzi'
-        else:
+        elif grid_type in ['米字格', 'mizi']:
             grid_type_code = 'mizi'
+        elif grid_type in ['回宫格', 'huigong']:
+            grid_type_code = 'huigong'
+        elif grid_type in ['方格', 'fangge']:
+            grid_type_code = 'fangge'
+        else:
+            grid_type_code = 'tianzi'
         
         font_style = data.get('font_style', 'zhenkai')
         
