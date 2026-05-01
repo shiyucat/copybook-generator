@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react'
-import templateApi, { exportApi } from '../services/api'
+import templateApi, { exportApi, pinyinApi } from '../services/api'
 
 const GridType = {
   TIANZI: '田字格',
@@ -69,6 +69,8 @@ function CopybookEditor({ config, onConfigChange }) {
   const [selectedTemplateId, setSelectedTemplateId] = useState('')
   const [loadingTemplates, setLoadingTemplates] = useState(false)
   const [currentPage, setCurrentPage] = useState(0)
+  const [pinyinData, setPinyinData] = useState({})
+  const [loadingPinyin, setLoadingPinyin] = useState(false)
 
   const gridSize = 60
 
@@ -159,10 +161,19 @@ function CopybookEditor({ config, onConfigChange }) {
     return `rgba(${r}, ${g}, ${b}, ${alpha})`
   }
 
-  const drawGrid = useCallback((ctx, x, y, size, type, color, character = '', isTemplate = false) => {
+  const drawGrid = useCallback((ctx, x, y, size, type, color, character = '', isTemplate = false, pinyin = '', showPinyin = false) => {
     if (isTemplate && character) {
       ctx.fillStyle = '#f5f5f5'
       ctx.fillRect(x, y, size, size)
+    }
+
+    if (showPinyin && isTemplate && pinyin) {
+      const pinyinFontSize = Math.max(10, Math.floor(size * 0.18))
+      ctx.font = `${pinyinFontSize}px sans-serif`
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'top'
+      ctx.fillStyle = '#666666'
+      ctx.fillText(pinyin, x + size / 2, y + 2)
     }
 
     ctx.strokeStyle = hexToRgba(color, 0.7)
@@ -206,11 +217,13 @@ function CopybookEditor({ config, onConfigChange }) {
     }
 
     if (character) {
-      ctx.font = `${Math.floor(size * 0.7)}px sans-serif`
+      const charOffset = showPinyin && isTemplate ? Math.floor(size * 0.12) : 0
+      const charFontSize = Math.floor(size * 0.7)
+      ctx.font = `${charFontSize}px sans-serif`
       ctx.textAlign = 'center'
       ctx.textBaseline = 'middle'
       ctx.fillStyle = isTemplate ? '#b4b4b4' : '#646464'
-      ctx.fillText(character, x + size / 2, y + size / 2)
+      ctx.fillText(character, x + size / 2, y + size / 2 + charOffset)
     }
   }, [])
 
@@ -248,9 +261,33 @@ function CopybookEditor({ config, onConfigChange }) {
     const usableHeightMm = currentPageSize.height - PRINT_CONFIG.MARGIN_TOP_MM - PRINT_CONFIG.MARGIN_BOTTOM_MM
     const cellSizeMm = gridSizeCm * 10
     const maxRows = Math.max(1, Math.floor(usableHeightMm / cellSizeMm))
-    const charsPerPage = Math.floor(maxRows / linesPerChar)
+    const charsPerPage = Math.max(1, Math.floor(maxRows / linesPerChar))
     return validChars.length === 0 ? 1 : Math.ceil(validChars.length / charsPerPage)
   }, [validChars, pageSize, gridSizeCm, linesPerChar])
+
+  useEffect(() => {
+    if (!showPinyin || validChars.length === 0) {
+      setPinyinData({})
+      return
+    }
+
+    const uniqueChars = [...new Set(validChars)]
+    
+    const fetchPinyin = async () => {
+      setLoadingPinyin(true)
+      try {
+        const data = await pinyinApi.getPinyin(uniqueChars)
+        setPinyinData(data || {})
+      } catch (err) {
+        console.error('获取拼音失败:', err)
+        setPinyinData({})
+      } finally {
+        setLoadingPinyin(false)
+      }
+    }
+
+    fetchPinyin()
+  }, [validChars, showPinyin])
 
   const generatePreview = useCallback(() => {
     const canvas = canvasRef.current
@@ -346,7 +383,7 @@ function CopybookEditor({ config, onConfigChange }) {
       return
     }
 
-    const charsPerPage = Math.floor(maxRows / linesPerChar)
+    const charsPerPage = Math.max(1, Math.floor(maxRows / linesPerChar))
     const totalPages = Math.ceil(validChars.length / charsPerPage)
     const pageToShow = Math.min(currentPage, Math.max(0, totalPages - 1))
 
@@ -357,6 +394,7 @@ function CopybookEditor({ config, onConfigChange }) {
 
     for (let charIndex = startCharIndex; charIndex < endCharIndex && rowIndex < maxRows; charIndex++) {
       const currentChar = validChars[charIndex]
+      const charPinyin = pinyinData[currentChar] || ''
 
       for (let lineRepeat = 0; lineRepeat < linesPerChar && rowIndex < maxRows; lineRepeat++) {
         for (let col = 0; col < cols; col++) {
@@ -366,21 +404,21 @@ function CopybookEditor({ config, onConfigChange }) {
           const isTemplate = col === 0
           const charToDraw = isTemplate ? currentChar : ''
 
-          drawGrid(ctx, x, y, previewCellSize, gridType, gridColor, charToDraw, isTemplate)
+          drawGrid(ctx, x, y, previewCellSize, gridType, gridColor, charToDraw, isTemplate, charPinyin, showPinyin)
         }
         rowIndex++
       }
     }
 
     ctx.restore()
-  }, [validChars, gridType, gridColor, drawGrid, pageSize, studentName, studentId, className, gridSizeCm, linesPerChar, currentPage])
+  }, [validChars, gridType, gridColor, drawGrid, pageSize, studentName, studentId, className, gridSizeCm, linesPerChar, currentPage, pinyinData, showPinyin])
 
   useEffect(() => {
     const currentPageSize = PageSize[pageSize] || PageSize.A4
     const usableHeightMm = currentPageSize.height - PRINT_CONFIG.MARGIN_TOP_MM - PRINT_CONFIG.MARGIN_BOTTOM_MM
     const cellSizeMm = gridSizeCm * 10
     const maxRows = Math.max(1, Math.floor(usableHeightMm / cellSizeMm))
-    const charsPerPage = Math.floor(maxRows / linesPerChar)
+    const charsPerPage = Math.max(1, Math.floor(maxRows / linesPerChar))
     const totalPages = Math.ceil(validChars.length / charsPerPage)
     
     if (currentPage >= totalPages && totalPages > 0) {

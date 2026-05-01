@@ -17,6 +17,12 @@ from pathlib import Path
 import urllib.request
 import urllib.error
 
+try:
+    from pypinyin import pinyin, Style
+    PINYIN_AVAILABLE = True
+except ImportError:
+    PINYIN_AVAILABLE = False
+
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm
 from reportlab.pdfgen import canvas
@@ -1369,6 +1375,7 @@ class CopybookGenerator:
                  font_style: str = "zhenkai",
                  grid_size_cm: float = DEFAULT_GRID_SIZE_CM,
                  lines_per_char: int = DEFAULT_LINES_PER_CHAR,
+                 show_pinyin: bool = DEFAULT_SHOW_PINYIN,
                  student_name: str = "",
                  student_id: str = "",
                  class_name: str = ""):
@@ -1385,6 +1392,7 @@ class CopybookGenerator:
             font_style: 字体样式，"zhenkai" 表示正楷（默认），"xingkai" 表示行楷
             grid_size_cm: 格子大小（厘米），默认2.0cm
             lines_per_char: 每个字的行数，默认1行
+            show_pinyin: 是否显示拼音，默认False
             student_name: 学生姓名
             student_id: 学号
             class_name: 班级
@@ -1398,6 +1406,7 @@ class CopybookGenerator:
         self.font_style = font_style
         self.grid_size_cm = grid_size_cm
         self.lines_per_char = max(1, min(50, lines_per_char))
+        self.show_pinyin = show_pinyin
         
         self.student_name = student_name or ""
         self.student_id = student_id or ""
@@ -2589,7 +2598,8 @@ class CopybookGenerator:
     def _draw_grid(self, c: canvas.Canvas, x: float, y: float, 
                    is_stroke_demo: bool = False, 
                    is_highlight: bool = False, 
-                   character: str = ""):
+                   character: str = "",
+                   pinyin_text: str = ""):
         """
         绘制单个田字格
         
@@ -2600,10 +2610,16 @@ class CopybookGenerator:
             is_stroke_demo: 是否为笔画展示模式（第一个格子）
             is_highlight: 是否为高亮模式（描红）
             character: 要显示的汉字
+            pinyin_text: 拼音文本
         """
         grid_size = self.grid_size
         
         char_font_size = int(grid_size * 0.7)
+        pinyin_font_size = int(grid_size * 0.18)
+        
+        char_offset = 0
+        if self.show_pinyin and is_stroke_demo and pinyin_text:
+            char_offset = int(grid_size * 0.12)
         
         if character and (is_stroke_demo or is_highlight):
             c.setFillColor(Color(0.95, 0.95, 0.95))
@@ -2614,9 +2630,19 @@ class CopybookGenerator:
             
             text_width = c.stringWidth(character, self.font_name, char_font_size)
             text_x = x + (grid_size - text_width) / 2
-            text_y = y + (grid_size - char_font_size) / 2 + (char_font_size * 0.15)
+            text_y = y + (grid_size - char_font_size) / 2 + (char_font_size * 0.15) - char_offset
             
             c.drawString(text_x, text_y, character)
+        
+        if self.show_pinyin and is_stroke_demo and pinyin_text:
+            c.setFillColor(Color(0.4, 0.4, 0.4))
+            c.setFont(self.font_name, pinyin_font_size)
+            
+            pinyin_width = c.stringWidth(pinyin_text, self.font_name, pinyin_font_size)
+            pinyin_x = x + (grid_size - pinyin_width) / 2
+            pinyin_y = y + grid_size - pinyin_font_size - 2
+            
+            c.drawString(pinyin_x, pinyin_y, pinyin_text)
         
         c.setStrokeColor(gray)
         c.setLineWidth(1)
@@ -2701,12 +2727,26 @@ class CopybookGenerator:
         """
         self._draw_header(c)
         
+        pinyin_cache = {}
+        if self.show_pinyin and PINYIN_AVAILABLE:
+            for char in characters:
+                if char and char not in pinyin_cache:
+                    try:
+                        pinyin_result = pinyin(char, style=Style.TONE)
+                        if pinyin_result and pinyin_result[0]:
+                            pinyin_cache[char] = pinyin_result[0][0]
+                        else:
+                            pinyin_cache[char] = char
+                    except Exception:
+                        pinyin_cache[char] = char
+        
         row_index = 0
         char_index = start_char_index
         total_chars = len(characters)
         
         while char_index < total_chars and row_index < self.grid_rows:
             current_char = characters[char_index]
+            char_pinyin = pinyin_cache.get(current_char, "")
             
             for line_repeat in range(self.lines_per_char):
                 if row_index >= self.grid_rows:
@@ -2721,7 +2761,8 @@ class CopybookGenerator:
                     self._draw_grid(c, x, y,
                                    is_stroke_demo=is_template,
                                    is_highlight=is_template,
-                                   character=current_char if is_template else "")
+                                   character=current_char if is_template else "",
+                                   pinyin_text=char_pinyin if is_template else "")
                 
                 row_index += 1
             
