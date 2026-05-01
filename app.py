@@ -15,7 +15,14 @@ from flask_cors import CORS
 from pathlib import Path
 
 from database import TemplateDatabase, Template
-from copybook_generator import CopybookGenerator, PAGE_SIZES, DEFAULT_PAGE_SIZE
+from copybook_generator import (
+    CopybookGenerator, 
+    PAGE_SIZES, 
+    DEFAULT_PAGE_SIZE,
+    DEFAULT_GRID_SIZE_CM,
+    DEFAULT_LINES_PER_CHAR,
+    DEFAULT_SHOW_PINYIN
+)
 
 
 app = Flask(__name__)
@@ -346,10 +353,14 @@ def export_pdf():
         {
             "characters": ["一", "二", "三"],
             "grid_type": "田字格",
+            "grid_size_cm": 2.0,
+            "lines_per_char": 1,
+            "show_pinyin": false,
             "font_style": "zhenkai",
             "student_name": "学生姓名",
             "student_id": "学号",
-            "class_name": "班级"
+            "class_name": "班级",
+            "page_size": "A4"
         }
     
     Returns:
@@ -382,6 +393,21 @@ def export_pdf():
         
         font_style = data.get('font_style', 'zhenkai')
         
+        grid_size_cm = data.get('grid_size_cm', DEFAULT_GRID_SIZE_CM)
+        try:
+            grid_size_cm = float(grid_size_cm)
+        except (TypeError, ValueError):
+            grid_size_cm = DEFAULT_GRID_SIZE_CM
+        
+        lines_per_char = data.get('lines_per_char', DEFAULT_LINES_PER_CHAR)
+        try:
+            lines_per_char = int(lines_per_char)
+            lines_per_char = max(1, min(50, lines_per_char))
+        except (TypeError, ValueError):
+            lines_per_char = DEFAULT_LINES_PER_CHAR
+        
+        show_pinyin = data.get('show_pinyin', DEFAULT_SHOW_PINYIN)
+        
         student_name = data.get('student_name', '')
         student_id = data.get('student_id', '')
         class_name = data.get('class_name', '')
@@ -397,6 +423,8 @@ def export_pdf():
                 paper_size=paper_size,
                 grid_type=grid_type_code,
                 font_style=font_style,
+                grid_size_cm=grid_size_cm,
+                lines_per_char=lines_per_char,
                 student_name=student_name,
                 student_id=student_id,
                 class_name=class_name

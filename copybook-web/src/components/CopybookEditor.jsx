@@ -19,6 +19,18 @@ const PageSize = {
 
 const DEFAULT_PAGE_SIZE = 'A4'
 
+const GridSizeOptions = [
+  { value: 2.0, label: '2.0 cm (幼小衔接)', isDefault: true },
+  { value: 1.8, label: '1.8 cm (小学 1-2 年级 推荐)' },
+  { value: 1.5, label: '1.5 cm (小学 3-6 年级)' },
+  { value: 1.2, label: '1.2 cm (初中 / 成人行楷)' },
+  { value: 1.0, label: '1.0 cm (小楷密集版)' },
+]
+
+const DEFAULT_GRID_SIZE_CM = 2.0
+const DEFAULT_LINES_PER_CHAR = 1
+const DEFAULT_SHOW_PINYIN = false
+
 const PRINT_CONFIG = {
   MARGIN_LEFT_MM: 20,
   MARGIN_RIGHT_MM: 20,
@@ -27,6 +39,7 @@ const PRINT_CONFIG = {
   HEADER_HEIGHT_MM: 10,
   GRID_COLS: 5,
   GRID_ROWS: 10,
+  BORDER_RATIO: 0.1,
 }
 
 function CopybookEditor({ config, onConfigChange }) {
@@ -37,6 +50,11 @@ function CopybookEditor({ config, onConfigChange }) {
   const [gridColor, setGridColor] = useState(
     /^#[0-9A-Fa-f]{6}$/.test(safeConfig.grid_color) ? safeConfig.grid_color : DEFAULT_GRID_COLOR
   )
+  const [gridSizeCm, setGridSizeCm] = useState(safeConfig.grid_size_cm ?? DEFAULT_GRID_SIZE_CM)
+  const [linesPerChar, setLinesPerChar] = useState(
+    safeConfig.lines_per_char ? Math.max(1, Math.min(50, parseInt(safeConfig.lines_per_char, 10))) : DEFAULT_LINES_PER_CHAR
+  )
+  const [showPinyin, setShowPinyin] = useState(safeConfig.show_pinyin ?? DEFAULT_SHOW_PINYIN)
   const [fontStyle, setFontStyle] = useState(safeConfig.font_style ?? 'zhenkai')
   const [studentName, setStudentName] = useState(String(safeConfig.student_name ?? ''))
   const [studentId, setStudentId] = useState(String(safeConfig.student_id ?? ''))
@@ -74,6 +92,11 @@ function CopybookEditor({ config, onConfigChange }) {
       setInputText(String(config.input_text ?? ''))
       setGridType(config.grid_type ?? GridType.TIANZI)
       setGridColor(/^#[0-9A-Fa-f]{6}$/.test(config.grid_color) ? config.grid_color : DEFAULT_GRID_COLOR)
+      setGridSizeCm(config.grid_size_cm ?? DEFAULT_GRID_SIZE_CM)
+      setLinesPerChar(
+        config.lines_per_char ? Math.max(1, Math.min(50, parseInt(config.lines_per_char, 10))) : DEFAULT_LINES_PER_CHAR
+      )
+      setShowPinyin(config.show_pinyin ?? DEFAULT_SHOW_PINYIN)
       setFontStyle(config.font_style ?? 'zhenkai')
       setStudentName(String(config.student_name ?? ''))
       setStudentId(String(config.student_id ?? ''))
@@ -92,6 +115,11 @@ function CopybookEditor({ config, onConfigChange }) {
       const configData = template.config_data
       setGridType(configData.grid_type ?? GridType.TIANZI)
       setGridColor(/^#[0-9A-Fa-f]{6}$/.test(configData.grid_color) ? configData.grid_color : DEFAULT_GRID_COLOR)
+      setGridSizeCm(configData.grid_size_cm ?? DEFAULT_GRID_SIZE_CM)
+      setLinesPerChar(
+        configData.lines_per_char ? Math.max(1, Math.min(50, parseInt(configData.lines_per_char, 10))) : DEFAULT_LINES_PER_CHAR
+      )
+      setShowPinyin(configData.show_pinyin ?? DEFAULT_SHOW_PINYIN)
       setFontStyle(configData.font_style ?? 'zhenkai')
       setStudentName(String(configData.student_name ?? ''))
       setStudentId(String(configData.student_id ?? ''))
@@ -108,6 +136,9 @@ function CopybookEditor({ config, onConfigChange }) {
       grid_type: gridType,
       grid_color: gridColor,
       grid_size: gridSize,
+      grid_size_cm: gridSizeCm,
+      lines_per_char: linesPerChar,
+      show_pinyin: showPinyin,
       font_style: fontStyle,
       student_name: studentName,
       student_id: studentId,
@@ -117,7 +148,7 @@ function CopybookEditor({ config, onConfigChange }) {
     if (onConfigChange) {
       onConfigChange(newConfig)
     }
-  }, [inputText, gridType, gridColor, fontStyle, studentName, studentId, className, pageSize, onConfigChange])
+  }, [inputText, gridType, gridColor, gridSizeCm, linesPerChar, showPinyin, fontStyle, studentName, studentId, className, pageSize, onConfigChange])
 
   const hexToRgba = (hex, alpha) => {
     const validHex = /^#[0-9A-Fa-f]{6}$/.test(hex) ? hex : DEFAULT_GRID_COLOR
@@ -234,11 +265,15 @@ function CopybookEditor({ config, onConfigChange }) {
     const usableWidthMm = pageWidthMm - marginLeftMm - marginRightMm
     const usableHeightMm = pageHeightMm - marginTopMm - marginBottomMm
 
-    const cols = PRINT_CONFIG.GRID_COLS
-    const maxRows = PRINT_CONFIG.GRID_ROWS
+    const cellSizeMm = gridSizeCm * 10
 
-    const cellSizeMm = Math.min(usableWidthMm / cols, usableHeightMm / maxRows)
-    const gridPaddingMm = (usableWidthMm - cellSizeMm * cols) / 2
+    const borderWidthMm = usableWidthMm * PRINT_CONFIG.BORDER_RATIO
+    const actualUsableWidthMm = usableWidthMm - 2 * borderWidthMm
+
+    const cols = Math.max(1, Math.floor(actualUsableWidthMm / cellSizeMm))
+    const maxRows = Math.max(1, Math.floor(usableHeightMm / cellSizeMm))
+
+    const gridPaddingMm = (actualUsableWidthMm - cols * cellSizeMm) / 2 + borderWidthMm
 
     const pageRatio = pageWidthMm / pageHeightMm
     const canvasRatio = canvasWidth / canvasHeight
@@ -308,22 +343,24 @@ function CopybookEditor({ config, onConfigChange }) {
     while (charIndex < totalChars && rowIndex < maxRows) {
       const currentChar = validChars[charIndex]
 
-      for (let col = 0; col < cols; col++) {
-        const x = offsetX + previewMarginLeft + previewGridPadding + col * previewCellSize
-        const y = offsetY + mmToPx(marginTopMm + rowIndex * cellSizeMm)
+      for (let lineRepeat = 0; lineRepeat < linesPerChar && rowIndex < maxRows; lineRepeat++) {
+        for (let col = 0; col < cols; col++) {
+          const x = offsetX + previewMarginLeft + previewGridPadding + col * previewCellSize
+          const y = offsetY + mmToPx(marginTopMm + rowIndex * cellSizeMm)
 
-        const isTemplate = col === 0
-        const charToDraw = isTemplate ? currentChar : ''
+          const isTemplate = col === 0
+          const charToDraw = isTemplate ? currentChar : ''
 
-        drawGrid(ctx, x, y, previewCellSize, gridType, gridColor, charToDraw, isTemplate)
+          drawGrid(ctx, x, y, previewCellSize, gridType, gridColor, charToDraw, isTemplate)
+        }
+        rowIndex++
       }
 
       charIndex++
-      rowIndex++
     }
 
     ctx.restore()
-  }, [validChars, gridType, gridColor, drawGrid, pageSize, studentName, studentId, className])
+  }, [validChars, gridType, gridColor, drawGrid, pageSize, studentName, studentId, className, gridSizeCm, linesPerChar])
 
   useEffect(() => {
     generatePreview()
@@ -366,6 +403,9 @@ function CopybookEditor({ config, onConfigChange }) {
         config_data: {
           grid_type: gridType,
           grid_color: gridColor,
+          grid_size_cm: gridSizeCm,
+          lines_per_char: linesPerChar,
+          show_pinyin: showPinyin,
           font_style: fontStyle,
           grid_size: gridSize,
           student_name: studentName,
@@ -407,6 +447,9 @@ function CopybookEditor({ config, onConfigChange }) {
         characters: validChars,
         grid_type: gridType,
         grid_color: gridColor,
+        grid_size_cm: gridSizeCm,
+        lines_per_char: linesPerChar,
+        show_pinyin: showPinyin,
         font_style: fontStyle,
         student_name: studentName,
         student_id: studentId,
@@ -534,6 +577,61 @@ function CopybookEditor({ config, onConfigChange }) {
                 </option>
               ))}
             </select>
+          </div>
+
+          <h3 className="section-title" style={{ marginTop: '16px' }}>格子大小</h3>
+          <div className="form-group">
+            <div className="radio-group">
+              {GridSizeOptions.map((option) => (
+                <label key={option.value} className="radio-label">
+                  <input
+                    type="radio"
+                    name="gridSize"
+                    value={option.value}
+                    checked={gridSizeCm === option.value}
+                    onChange={(e) => setGridSizeCm(parseFloat(e.target.value))}
+                    className="radio-input"
+                  />
+                  <span className="radio-text">{option.label}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <h3 className="section-title" style={{ marginTop: '16px' }}>每个字的行数</h3>
+          <div className="form-group">
+            <input
+              type="number"
+              className="form-input"
+              value={linesPerChar}
+              onChange={(e) => {
+                const val = parseInt(e.target.value, 10)
+                if (!isNaN(val) && val >= 1 && val <= 50) {
+                  setLinesPerChar(val)
+                } else if (e.target.value === '') {
+                  setLinesPerChar(1)
+                }
+              }}
+              min={1}
+              max={50}
+              placeholder="请输入行数（1-50）"
+            />
+            <p className="input-hint" style={{ marginTop: '4px', fontSize: '12px' }}>
+              每个字在字帖中重复显示的行数（1-50行）
+            </p>
+          </div>
+
+          <h3 className="section-title" style={{ marginTop: '16px' }}>拼音显示</h3>
+          <div className="form-group">
+            <label className="checkbox-label">
+              <input
+                type="checkbox"
+                checked={showPinyin}
+                onChange={(e) => setShowPinyin(e.target.checked)}
+                className="checkbox-input"
+              />
+              <span className="checkbox-text">显示拼音（开启后在字帖预览中显示）</span>
+            </label>
           </div>
 
           <h3 className="section-title" style={{ marginTop: '16px' }}>格子颜色</h3>
