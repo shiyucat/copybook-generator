@@ -8,6 +8,13 @@ const SceneTypeLabels = {
   character: '生字场景',
 }
 
+const PageSizeLabels = {
+  A4: 'A4',
+  SIZE_16K: '16开',
+  A5: 'A5',
+  B5: 'B5',
+}
+
 function ExportHistory() {
   const [historyList, setHistoryList] = useState([])
   const [loading, setLoading] = useState(true)
@@ -260,7 +267,7 @@ function ExportHistory() {
                         {item.input_text || '-'}
                       </div>
                     </td>
-                    <td>{item.page_size || '-'}</td>
+                    <td>{PageSizeLabels[item.page_size] || item.page_size || '-'}</td>
                     <td>{formatDateTime(item.updated_at)}</td>
                     <td>
                       <span className="export-count">{item.export_count}</span>
