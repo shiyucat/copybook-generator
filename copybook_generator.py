@@ -48,6 +48,13 @@ BORDER_RATIO = 0.1
 DEFAULT_FONT_COLOR = (0.0, 0.0, 0.0)
 DEFAULT_PINYIN_COLOR = (0.0, 0.0, 0.0)
 
+CHARACTER_SCENE_CONFIG = {
+    "CHARACTER_BOX_SIZE_MM": 40,
+    "RIGHT_GRID_SIZE_MM": 20,
+    "GAP_SIZE_MM": 2,
+    "RIGHT_GRID_ROWS": 2,
+}
+
 try:
     from PIL import Image, ImageDraw, ImageFont
     PIL_AVAILABLE = True
@@ -2945,6 +2952,235 @@ class CopybookGenerator:
         c.setFillColor(gray)
         footer_text = f"第 {page_num} 页"
         c.drawString(self.margin_left, 10 * mm, footer_text)
+    
+    def _calculate_character_scene_layout(self):
+        """
+        计算生字模式的布局参数
+        
+        Returns:
+            Dict: 包含布局参数的字典
+        """
+        usable_width = self.paper_width - self.margin_left - self.margin_right
+        usable_height = self.paper_height - self.margin_top - self.margin_bottom
+        
+        char_box_size = CHARACTER_SCENE_CONFIG["CHARACTER_BOX_SIZE_MM"] * mm
+        right_grid_size = CHARACTER_SCENE_CONFIG["RIGHT_GRID_SIZE_MM"] * mm
+        gap = CHARACTER_SCENE_CONFIG["GAP_SIZE_MM"] * mm
+        right_rows = CHARACTER_SCENE_CONFIG["RIGHT_GRID_ROWS"]
+        
+        right_area_width = usable_width - char_box_size - gap
+        
+        right_cols = max(1, int((right_area_width + gap) / (right_grid_size + gap)))
+        
+        row_height = char_box_size + gap
+        max_rows_per_page = max(1, int(usable_height / row_height))
+        
+        return {
+            "char_box_size": char_box_size,
+            "right_grid_size": right_grid_size,
+            "gap": gap,
+            "right_rows": right_rows,
+            "right_cols": right_cols,
+            "row_height": row_height,
+            "max_rows_per_page": max_rows_per_page,
+            "usable_width": usable_width,
+            "usable_height": usable_height,
+        }
+    
+    def _draw_character_box(self, c: canvas.Canvas, x: float, y: float, 
+                            character: str = "", pinyin_text: str = ""):
+        """
+        绘制生字框（田字格，4cm）
+        
+        Args:
+            c: PDF画布对象
+            x: 左下角x坐标
+            y: 左下角y坐标
+            character: 要显示的汉字
+            pinyin_text: 拼音文本
+        """
+        size = CHARACTER_SCENE_CONFIG["CHARACTER_BOX_SIZE_MM"] * mm
+        
+        c.setStrokeColor(Color(0.5, 0.5, 0.5))
+        c.setLineWidth(1.5)
+        c.rect(x, y, size, size)
+        
+        c.setStrokeColor(Color(0.7, 0.7, 0.7))
+        c.setLineWidth(1)
+        c.line(x, y + size / 2, x + size, y + size / 2)
+        c.line(x + size / 2, y, x + size / 2, y + size)
+        
+        if pinyin_text:
+            pinyin_font_size = int(size * 0.12)
+            c.setFillColor(Color(self.pinyin_color[0], self.pinyin_color[1], self.pinyin_color[2]))
+            c.setFont(self.font_name, pinyin_font_size)
+            
+            pinyin_width = c.stringWidth(pinyin_text, self.font_name, pinyin_font_size)
+            pinyin_x = x + (size - pinyin_width) / 2
+            pinyin_y = y + size - pinyin_font_size - 2
+            
+            c.drawString(pinyin_x, pinyin_y, pinyin_text)
+        
+        if character:
+            char_font_size = int(size * 0.65)
+            c.setFillColor(Color(self.font_color[0], self.font_color[1], self.font_color[2]))
+            c.setFont(self.font_name, char_font_size)
+            
+            text_width = c.stringWidth(character, self.font_name, char_font_size)
+            text_x = x + (size - text_width) / 2
+            text_y = y + (size - char_font_size) / 2 + (char_font_size * 0.15)
+            if pinyin_text:
+                text_y -= size * 0.05
+            
+            c.drawString(text_x, text_y, character)
+    
+    def _draw_mizi_grid_small(self, c: canvas.Canvas, x: float, y: float):
+        """
+        绘制小米字格（2cm，空白）
+        
+        Args:
+            c: PDF画布对象
+            x: 左下角x坐标
+            y: 左下角y坐标
+        """
+        size = CHARACTER_SCENE_CONFIG["RIGHT_GRID_SIZE_MM"] * mm
+        
+        c.setStrokeColor(Color(0.5, 0.5, 0.5))
+        c.setLineWidth(1)
+        c.rect(x, y, size, size)
+        
+        c.setStrokeColor(Color(0.8, 0.8, 0.8))
+        c.setLineWidth(0.5)
+        
+        c.line(x, y + size / 2, x + size, y + size / 2)
+        c.line(x + size / 2, y, x + size / 2, y + size)
+        c.line(x, y, x + size, y + size)
+        c.line(x + size, y, x, y + size)
+    
+    def _draw_character_row(self, c: canvas.Canvas, x: float, y: float, 
+                            character: str = "", pinyin_text: str = ""):
+        """
+        绘制一整行生字（生字框 + 右侧米字格）
+        
+        Args:
+            c: PDF画布对象
+            x: 左下角x坐标
+            y: 左下角y坐标
+            character: 要显示的汉字
+            pinyin_text: 拼音文本
+        """
+        layout = self._calculate_character_scene_layout()
+        char_box_size = layout["char_box_size"]
+        right_grid_size = layout["right_grid_size"]
+        gap = layout["gap"]
+        right_cols = layout["right_cols"]
+        right_rows = layout["right_rows"]
+        
+        self._draw_character_box(c, x, y, character, pinyin_text)
+        
+        right_area_x = x + char_box_size + gap
+        
+        for row in range(right_rows):
+            for col in range(right_cols):
+                grid_x = right_area_x + col * (right_grid_size + gap)
+                grid_y = y + row * (right_grid_size + gap / 2)
+                self._draw_mizi_grid_small(c, grid_x, grid_y)
+    
+    def _draw_page_character_scene(self, c: canvas.Canvas, characters: List[str],
+                                    start_char_index: int, page_num: int) -> int:
+        """
+        绘制生字模式的单页
+        
+        Args:
+            c: PDF画布对象
+            characters: 字符列表
+            start_char_index: 起始字符索引
+            page_num: 页码
+            
+        Returns:
+            int: 下一页起始字符索引
+        """
+        self._draw_header(c)
+        
+        pinyin_cache = {}
+        if PINYIN_AVAILABLE:
+            for char in characters:
+                if char and char not in pinyin_cache:
+                    try:
+                        pinyin_result = pinyin(char, style=Style.TONE)
+                        if pinyin_result and pinyin_result[0]:
+                            pinyin_cache[char] = pinyin_result[0][0]
+                        else:
+                            pinyin_cache[char] = char
+                    except Exception:
+                        pinyin_cache[char] = char
+        
+        layout = self._calculate_character_scene_layout()
+        max_rows = layout["max_rows_per_page"]
+        row_height = layout["row_height"]
+        
+        char_index = start_char_index
+        total_chars = len(characters)
+        
+        for row_on_page in range(max_rows):
+            if char_index >= total_chars:
+                break
+            
+            current_char = characters[char_index]
+            char_pinyin = pinyin_cache.get(current_char, "")
+            
+            row_y = self.paper_height - self.margin_top - (row_on_page + 1) * row_height + row_height - layout["char_box_size"]
+            
+            self._draw_character_row(
+                c, 
+                self.margin_left, 
+                row_y, 
+                current_char, 
+                char_pinyin
+            )
+            
+            char_index += 1
+        
+        c.setFont("Helvetica", 10)
+        c.setFillColor(gray)
+        footer_text = f"第 {page_num} 页"
+        c.drawString(self.margin_left, 10 * mm, footer_text)
+        
+        return char_index
+    
+    def generate_character_scene(self, characters: List[str], output_path: str) -> Tuple[bool, str]:
+        """
+        生成生字模式的PDF字帖
+        
+        Args:
+            characters: 要生成的字符列表
+            output_path: 输出PDF文件路径
+            
+        Returns:
+            Tuple[bool, str]: (是否成功, 错误信息)
+        """
+        if not characters:
+            return False, "字符列表不能为空"
+        
+        try:
+            c = canvas.Canvas(output_path, pagesize=(self.paper_width, self.paper_height))
+            
+            char_index = 0
+            page_num = 1
+            total_chars = len(characters)
+            
+            while char_index < total_chars:
+                char_index = self._draw_page_character_scene(
+                    c, characters, char_index, page_num
+                )
+                c.showPage()
+                page_num += 1
+            
+            c.save()
+            return True, f"字帖已成功生成：{output_path}"
+            
+        except Exception as e:
+            return False, f"生成字帖时发生错误：{str(e)}"
     
     def generate(self, character: str, output_path: str, 
                  num_pages: int = 1) -> Tuple[bool, str]:

@@ -417,6 +417,7 @@ def export_pdf():
     Request Body:
         {
             "characters": ["一", "二", "三"],
+            "scene_type": "normal",
             "grid_type": "田字格",
             "grid_size_cm": 2.0,
             "lines_per_char": 1,
@@ -425,7 +426,9 @@ def export_pdf():
             "student_name": "学生姓名",
             "student_id": "学号",
             "class_name": "班级",
-            "page_size": "A4"
+            "page_size": "A4",
+            "font_color": "#000000",
+            "pinyin_color": "#000000"
         }
     
     Returns:
@@ -449,6 +452,8 @@ def export_pdf():
         
         if not isinstance(characters, list):
             characters = [characters]
+        
+        scene_type = data.get('scene_type', 'normal')
         
         grid_type = data.get('grid_type', '田字格')
         if grid_type in ['田字格', 'tianzi']:
@@ -514,7 +519,10 @@ def export_pdf():
                 class_name=class_name
             )
             
-            success, message = generator.generate_from_chars(characters, output_path)
+            if scene_type == 'character':
+                success, message = generator.generate_character_scene(characters, output_path)
+            else:
+                success, message = generator.generate_from_chars(characters, output_path)
             
             if not success:
                 os.unlink(output_path)
