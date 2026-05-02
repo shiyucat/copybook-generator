@@ -44,9 +44,12 @@ DEFAULT_PAGE_SIZE = "A4"
 DEFAULT_GRID_SIZE_CM = 2.0
 DEFAULT_LINES_PER_CHAR = 1
 DEFAULT_SHOW_PINYIN = False
+DEFAULT_SHOW_CHARACTER_PINYIN = True
 BORDER_RATIO = 0.1
 DEFAULT_FONT_COLOR = (0.0, 0.0, 0.0)
 DEFAULT_PINYIN_COLOR = (0.0, 0.0, 0.0)
+DEFAULT_CHARACTER_COLOR = (0.0, 0.0, 0.0)
+DEFAULT_RIGHT_GRID_COLOR = (0.0, 0.0, 0.0)
 
 CHARACTER_SCENE_CONFIG = {
     "CHARACTER_BOX_SIZE_MM": 40,
@@ -1384,9 +1387,12 @@ class CopybookGenerator:
                  font_style: str = "zhenkai",
                  font_color: Tuple[float, float, float] = DEFAULT_FONT_COLOR,
                  pinyin_color: Tuple[float, float, float] = DEFAULT_PINYIN_COLOR,
+                 character_color: Tuple[float, float, float] = DEFAULT_CHARACTER_COLOR,
+                 right_grid_color: Tuple[float, float, float] = DEFAULT_RIGHT_GRID_COLOR,
                  grid_size_cm: float = DEFAULT_GRID_SIZE_CM,
                  lines_per_char: int = DEFAULT_LINES_PER_CHAR,
                  show_pinyin: bool = DEFAULT_SHOW_PINYIN,
+                 show_character_pinyin: bool = DEFAULT_SHOW_CHARACTER_PINYIN,
                  student_name: str = "",
                  student_id: str = "",
                  class_name: str = ""):
@@ -1403,9 +1409,12 @@ class CopybookGenerator:
             font_style: 字体样式，"zhenkai" 表示正楷（默认），"xingkai" 表示行楷
             font_color: 字体颜色（RGB元组，值为0.0-1.0），默认黑色
             pinyin_color: 拼音颜色（RGB元组，值为0.0-1.0），默认黑色
+            character_color: 生字颜色（RGB元组，值为0.0-1.0），默认黑色
+            right_grid_color: 右侧格子颜色（RGB元组，值为0.0-1.0），默认黑色
             grid_size_cm: 格子大小（厘米），默认2.0cm
             lines_per_char: 每个字的行数，默认1行
-            show_pinyin: 是否显示拼音，默认False
+            show_pinyin: 是否显示拼音（普通场景），默认False
+            show_character_pinyin: 是否显示拼音（生字场景），默认True
             student_name: 学生姓名
             student_id: 学号
             class_name: 班级
@@ -1419,9 +1428,12 @@ class CopybookGenerator:
         self.font_style = font_style
         self.font_color = font_color
         self.pinyin_color = pinyin_color
+        self.character_color = character_color
+        self.right_grid_color = right_grid_color
         self.grid_size_cm = grid_size_cm
         self.lines_per_char = max(1, min(50, lines_per_char))
         self.show_pinyin = show_pinyin
+        self.show_character_pinyin = show_character_pinyin
         
         self.student_name = student_name or ""
         self.student_id = student_id or ""
@@ -3008,15 +3020,15 @@ class CopybookGenerator:
         tianzi_x = x + inner_margin
         tianzi_y = y + inner_margin
         
-        c.setStrokeColor(Color(0.5, 0.5, 0.5))
+        c.setStrokeColor(Color(self.grid_color[0], self.grid_color[1], self.grid_color[2]))
         c.setLineWidth(outer_line_width)
         c.rect(x, y, size, size)
         
-        c.setStrokeColor(Color(0.5, 0.5, 0.5))
+        c.setStrokeColor(Color(self.grid_color[0], self.grid_color[1], self.grid_color[2]))
         c.setLineWidth(1.5)
         c.rect(tianzi_x, tianzi_y, tianzi_size, tianzi_size)
         
-        c.setStrokeColor(Color(0.7, 0.7, 0.7))
+        c.setStrokeColor(Color(self.grid_color[0], self.grid_color[1], self.grid_color[2]))
         c.setLineWidth(1)
         c.line(tianzi_x, tianzi_y + tianzi_size / 2, tianzi_x + tianzi_size, tianzi_y + tianzi_size / 2)
         c.line(tianzi_x + tianzi_size / 2, tianzi_y, tianzi_x + tianzi_size / 2, tianzi_y + tianzi_size)
@@ -3035,7 +3047,7 @@ class CopybookGenerator:
         
         if character:
             char_font_size = int(tianzi_size * 0.7)
-            c.setFillColor(Color(self.font_color[0], self.font_color[1], self.font_color[2]))
+            c.setFillColor(Color(self.character_color[0], self.character_color[1], self.character_color[2]))
             c.setFont(self.font_name, char_font_size)
             
             text_width = c.stringWidth(character, self.font_name, char_font_size)
@@ -3055,11 +3067,11 @@ class CopybookGenerator:
         """
         size = CHARACTER_SCENE_CONFIG["RIGHT_GRID_SIZE_MM"] * mm
         
-        c.setStrokeColor(Color(0.5, 0.5, 0.5))
+        c.setStrokeColor(Color(self.right_grid_color[0], self.right_grid_color[1], self.right_grid_color[2]))
         c.setLineWidth(1)
         c.rect(x, y, size, size)
         
-        c.setStrokeColor(Color(0.8, 0.8, 0.8))
+        c.setStrokeColor(Color(self.right_grid_color[0], self.right_grid_color[1], self.right_grid_color[2]))
         c.setLineWidth(0.5)
         
         c.line(x, y + size / 2, x + size, y + size / 2)
@@ -3099,8 +3111,7 @@ class CopybookGenerator:
                 self._draw_mizi_grid_small(c, grid_x, grid_y)
     
     def _draw_page_character_scene(self, c: canvas.Canvas, characters: List[str],
-                                    start_char_index: int, page_num: int,
-                                    show_pinyin: bool = False) -> int:
+                                    start_char_index: int, page_num: int) -> int:
         """
         绘制生字模式的单页
         
@@ -3109,7 +3120,6 @@ class CopybookGenerator:
             characters: 字符列表
             start_char_index: 起始字符索引
             page_num: 页码
-            show_pinyin: 是否显示拼音
             
         Returns:
             int: 下一页起始字符索引
@@ -3117,7 +3127,7 @@ class CopybookGenerator:
         self._draw_header(c)
         
         pinyin_cache = {}
-        if PINYIN_AVAILABLE:
+        if PINYIN_AVAILABLE and self.show_character_pinyin:
             for char in characters:
                 if char and char not in pinyin_cache:
                     try:
@@ -3151,7 +3161,7 @@ class CopybookGenerator:
                 row_y, 
                 current_char, 
                 char_pinyin,
-                show_pinyin
+                self.show_character_pinyin
             )
             
             char_index += 1
@@ -3163,15 +3173,13 @@ class CopybookGenerator:
         
         return char_index
     
-    def generate_character_scene(self, characters: List[str], output_path: str,
-                                 show_pinyin: bool = False) -> Tuple[bool, str]:
+    def generate_character_scene(self, characters: List[str], output_path: str) -> Tuple[bool, str]:
         """
         生成生字模式的PDF字帖
         
         Args:
             characters: 要生成的字符列表
             output_path: 输出PDF文件路径
-            show_pinyin: 是否显示拼音
             
         Returns:
             Tuple[bool, str]: (是否成功, 错误信息)
@@ -3188,7 +3196,7 @@ class CopybookGenerator:
             
             while char_index < total_chars:
                 char_index = self._draw_page_character_scene(
-                    c, characters, char_index, page_num, show_pinyin
+                    c, characters, char_index, page_num
                 )
                 c.showPage()
                 page_num += 1
