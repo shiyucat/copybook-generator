@@ -692,11 +692,12 @@ def get_pinyin():
 @app.route('/api/export-history', methods=['GET'])
 def get_export_history():
     """
-    获取导出历史列表（支持分页）
+    获取导出历史列表（支持分页和搜索）
     
     Query Parameters:
         page: 页码（从1开始，可选，不传则返回所有）
         page_size: 每页数量（可选，默认10，可选值：10,20,50,100）
+        keyword: 搜索关键字（可选，用于姓名或学号的模糊匹配）
     
     Returns:
         JSON 格式的导出历史列表
@@ -704,13 +705,21 @@ def get_export_history():
     try:
         page = request.args.get('page', type=int)
         page_size = request.args.get('page_size', 10, type=int)
+        keyword = request.args.get('keyword', '', type=str).strip()
         
         if page is not None and page > 0:
             page_size = max(10, min(100, page_size))
             if page_size not in [10, 20, 50, 100]:
                 page_size = 10
             
-            paginated = db.get_export_history_paginated(page=page, page_size=page_size)
+            if keyword:
+                paginated = db.search_export_history_paginated(
+                    keyword=keyword,
+                    page=page, 
+                    page_size=page_size
+                )
+            else:
+                paginated = db.get_export_history_paginated(page=page, page_size=page_size)
             
             result = []
             for history in paginated['history']:

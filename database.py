@@ -468,10 +468,59 @@ class TemplateDatabase:
         
         return count
     
+    def find_same_export_history(self, history: ExportHistory) -> Optional[ExportHistory]:
+        """
+        查找相同的导出历史记录
+        判断条件：场景类型 + 姓名 + 学号 + 文字内容 + 页面大小 都相同
+        
+        Args:
+            history: 导出历史对象
+            
+        Returns:
+            找到的历史记录，如果不存在返回 None
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT 
+                id as history_id,
+                scene_type,
+                student_name,
+                student_id,
+                input_text,
+                page_size,
+                export_count,
+                config_data,
+                created_at,
+                updated_at
+            FROM export_history 
+            WHERE scene_type = ? 
+              AND student_name = ? 
+              AND student_id = ? 
+              AND input_text = ? 
+              AND page_size = ?
+            LIMIT 1
+        """, (
+            history.scene_type,
+            history.student_name,
+            history.student_id,
+            history.input_text,
+            history.page_size
+        ))
+        
+        row = cursor.fetchone()
+        conn.close()
+        
+        if row:
+            return ExportHistory.from_dict(dict(row))
+        return None
+    
     def save_export_history(self, history: ExportHistory) -> int:
         """
         保存导出历史（编辑页面导出时使用）
-        每次导出都创建一条新记录，不合并相同配置
+        判断规则：场景类型 + 姓名 + 学号 + 文字内容 + 页面大小 都相同则视为同一个字帖
+        如果已存在相同字帖，则导出次数+1；否则创建新记录
         
         Args:
             history: 导出历史对象
@@ -479,6 +528,12 @@ class TemplateDatabase:
         Returns:
             历史记录ID
         """
+        existing = self.find_same_export_history(history)
+        
+        if existing:
+            self.increment_export_count(existing.history_id)
+            return existing.history_id
+        
         conn = self._get_connection()
         cursor = conn.cursor()
         
@@ -633,17 +688,95 @@ class TemplateDatabase:
             "total_pages": total_pages
         }
     
-    def get_export_history_count(self) -> int:
+    def search_export_history_paginated(
+        self, 
+        keyword: str, 
+        page: int = 1, 
+        page_size: int = 10
+    ) -> Dict[str, Any]:
+        """
+        按关键字搜索导出历史（支持姓名或学号的模糊匹配）
+        
+        Args:
+            keyword: 搜索关键字
+            page: 页码，从1开始
+            page_size: 每页数量
+            
+        Returns:
+            包含分页信息的字典
+        """
+        page = max(1, page)
+        page_size = max(1, min(100, page_size))
+        
+        search_pattern = f'%{keyword}%'
+        
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT COUNT(*) 
+            FROM export_history 
+            WHERE student_name LIKE ? OR student_id LIKE ?
+        """, (search_pattern, search_pattern))
+        total = cursor.fetchone()[0]
+        
+        total_pages = (total + page_size - 1) // page_size if total > 0 else 1
+        
+        offset = (page - 1) * page_size
+        
+        cursor.execute("""
+            SELECT 
+                id as history_id,
+                scene_type,
+                student_name,
+                student_id,
+                input_text,
+                page_size,
+                export_count,
+                config_data,
+                created_at,
+                updated_at
+            FROM export_history 
+            WHERE student_name LIKE ? OR student_id LIKE ?
+            ORDER BY updated_at DESC
+            LIMIT ? OFFSET ?
+        """, (search_pattern, search_pattern, page_size, offset))
+        
+        rows = cursor.fetchall()
+        conn.close()
+        
+        history_list = [ExportHistory.from_dict(dict(row)) for row in rows]
+        
+        return {
+            "history": history_list,
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "total_pages": total_pages
+        }
+    
+    def get_export_history_count(self, keyword: str = None) -> int:
         """
         获取导出历史总数
         
+        Args:
+            keyword: 可选的搜索关键字（用于搜索时计数）
+            
         Returns:
             导出历史数量
         """
         conn = self._get_connection()
         cursor = conn.cursor()
         
-        cursor.execute("SELECT COUNT(*) FROM export_history")
+        if keyword:
+            search_pattern = f'%{keyword}%'
+            cursor.execute(
+                "SELECT COUNT(*) FROM export_history WHERE student_name LIKE ? OR student_id LIKE ?",
+                (search_pattern, search_pattern)
+            )
+        else:
+            cursor.execute("SELECT COUNT(*) FROM export_history")
+        
         count = cursor.fetchone()[0]
         
         conn.close()

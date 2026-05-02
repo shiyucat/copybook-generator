@@ -15,11 +15,12 @@ const PageSizeLabels = {
   B5: 'B5',
 }
 
-function ExportHistory() {
+function ExportHistory({ onEditHistory }) {
   const [historyList, setHistoryList] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [exportingId, setExportingId] = useState(null)
+  const [searchKeyword, setSearchKeyword] = useState('')
 
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
@@ -30,11 +31,11 @@ function ExportHistory() {
     total_pages: 1,
   })
 
-  const fetchHistory = useCallback(async (page = 1, size = pageSize) => {
+  const fetchHistory = useCallback(async (page = 1, size = pageSize, keyword = searchKeyword) => {
     setLoading(true)
     setError(null)
     try {
-      const result = await exportHistoryApi.getPaginated(page, size)
+      const result = await exportHistoryApi.getPaginated(page, size, keyword)
       setHistoryList(result.data || [])
       setPagination(result.pagination)
       setCurrentPage(result.pagination.page)
@@ -43,11 +44,17 @@ function ExportHistory() {
     } finally {
       setLoading(false)
     }
-  }, [pageSize])
+  }, [pageSize, searchKeyword])
 
   useEffect(() => {
     fetchHistory(currentPage, pageSize)
   }, [fetchHistory, currentPage, pageSize])
+
+  const handleSearchChange = useCallback((e) => {
+    const value = e.target.value
+    setSearchKeyword(value)
+    setCurrentPage(1)
+  }, [])
 
   const handlePageSizeChange = (newSize) => {
     setPageSize(newSize)
@@ -207,15 +214,55 @@ function ExportHistory() {
     )
   }
 
+  const handleEditHistory = (historyItem) => {
+    if (onEditHistory) {
+      onEditHistory(historyItem)
+    }
+  }
+
   return (
     <div className="export-history">
-      <div className="history-header">
-        <h2>导出历史</h2>
-        {pagination.total > 0 && (
-          <span style={{ fontSize: '13px', color: '#666', marginLeft: '12px' }}>
-            共 {pagination.total} 条记录
-          </span>
-        )}
+      <div className="history-header" style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: '16px',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center' }}>
+          <h2>导出历史</h2>
+          {pagination.total > 0 && (
+            <span style={{ fontSize: '13px', color: '#666', marginLeft: '12px' }}>
+              共 {pagination.total} 条记录
+            </span>
+          )}
+        </div>
+        <div className="search-box" style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+        }}>
+          <span style={{ fontSize: '13px', color: '#666' }}>🔍</span>
+          <input
+            type="text"
+            placeholder="搜索姓名或学号..."
+            value={searchKeyword}
+            onChange={handleSearchChange}
+            style={{
+              padding: '8px 12px',
+              border: '1px solid #ddd',
+              borderRadius: '4px',
+              fontSize: '14px',
+              width: '200px',
+              outline: 'none',
+            }}
+            onFocus={(e) => {
+              e.target.style.borderColor = '#1890ff'
+            }}
+            onBlur={(e) => {
+              e.target.style.borderColor = '#ddd'
+            }}
+          />
+        </div>
       </div>
 
       {loading ? (
@@ -273,6 +320,16 @@ function ExportHistory() {
                       <span className="export-count">{item.export_count}</span>
                     </td>
                     <td>
+                      <button
+                        className="btn btn-sm btn-export-action"
+                        onClick={() => handleEditHistory(item)}
+                        title="编辑此配置"
+                        style={{
+                          marginRight: '8px',
+                        }}
+                      >
+                        ✏️
+                      </button>
                       <button
                         className="btn btn-sm btn-export-action"
                         onClick={() => handleReExport(item)}
