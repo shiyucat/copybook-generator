@@ -352,40 +352,50 @@ function CopybookEditor({ config, onConfigChange }) {
     }
   }, [])
 
-  const drawTianziGrid = useCallback((ctx, x, y, size, color, character = '', fontColor = DEFAULT_FONT_COLOR, pinyin = '', pinyinColor = DEFAULT_PINYIN_COLOR) => {
+  const drawCharacterBox = useCallback((ctx, x, y, size, color, character = '', fontColor = DEFAULT_FONT_COLOR, pinyin = '', pinyinColor = DEFAULT_PINYIN_COLOR, showPinyin = false) => {
+    const outerLineWidth = 2
+    const innerMargin = size * 0.15
+    const tianziSize = size - 2 * innerMargin
+    const tianziX = x + innerMargin
+    const tianziY = y + innerMargin
+
+    ctx.strokeStyle = hexToRgba(color, 0.8)
+    ctx.lineWidth = outerLineWidth
+    ctx.strokeRect(x, y, size, size)
+
     ctx.strokeStyle = hexToRgba(color, 0.8)
     ctx.lineWidth = 1.5
-    ctx.strokeRect(x, y, size, size)
+    ctx.strokeRect(tianziX, tianziY, tianziSize, tianziSize)
 
     ctx.strokeStyle = hexToRgba(color, 0.5)
     ctx.lineWidth = 1
     ctx.beginPath()
-    ctx.moveTo(x, y + size / 2)
-    ctx.lineTo(x + size, y + size / 2)
+    ctx.moveTo(tianziX, tianziY + tianziSize / 2)
+    ctx.lineTo(tianziX + tianziSize, tianziY + tianziSize / 2)
     ctx.stroke()
 
     ctx.beginPath()
-    ctx.moveTo(x + size / 2, y)
-    ctx.lineTo(x + size / 2, y + size)
+    ctx.moveTo(tianziX + tianziSize / 2, tianziY)
+    ctx.lineTo(tianziX + tianziSize / 2, tianziY + tianziSize)
     ctx.stroke()
 
-    if (pinyin) {
-      const pinyinMargin = size * 0.05
-      const pinyinFontSize = Math.max(10, Math.floor(size * 0.12))
+    if (showPinyin && pinyin) {
+      const pinyinY = y + innerMargin / 2
+      const pinyinFontSize = Math.max(12, Math.floor(innerMargin * 0.6))
       ctx.font = `${pinyinFontSize}px sans-serif`
       ctx.textAlign = 'center'
-      ctx.textBaseline = 'top'
+      ctx.textBaseline = 'middle'
       ctx.fillStyle = pinyinColor
-      ctx.fillText(pinyin, x + size / 2, y + pinyin + 2)
+      ctx.fillText(pinyin, x + size / 2, pinyinY)
     }
 
     if (character) {
-      const charFontSize = Math.floor(size * 0.65)
+      const charFontSize = Math.floor(tianziSize * 0.7)
       ctx.font = `${charFontSize}px sans-serif`
       ctx.textAlign = 'center'
       ctx.textBaseline = 'middle'
       ctx.fillStyle = fontColor
-      ctx.fillText(character, x + size / 2, y + size / 2 + (pinyin ? + 3 : 0))
+      ctx.fillText(character, tianziX + tianziSize / 2, tianziY + tianziSize / 2)
     }
   }, [])
 
@@ -427,23 +437,23 @@ function CopybookEditor({ config, onConfigChange }) {
     }
   }, [])
 
-  const drawCharacterRow = useCallback((ctx, x, y, rowWidth, character, pinyin, gridColor, fontColor, pinyinColor, mmToPx) => {
+  const drawCharacterRow = useCallback((ctx, x, y, rowWidth, character, pinyin, gridColor, fontColor, pinyinColor, mmToPx, showPinyin = false) => {
     const charBoxSize = mmToPx(CHARACTER_SCENE_CONFIG.CHARACTER_BOX_SIZE_MM)
     const gridSize = mmToPx(CHARACTER_SCENE_CONFIG.RIGHT_GRID_SIZE_MM)
     const gap = mmToPx(CHARACTER_SCENE_CONFIG.GAP_SIZE_MM)
     const rightRows = CHARACTER_SCENE_CONFIG.RIGHT_GRID_ROWS
 
-    drawTianziGrid(ctx, x, y, charBoxSize, gridColor, character, fontColor, pinyin, pinyinColor)
+    drawCharacterBox(ctx, x, y, charBoxSize, gridColor, character, fontColor, pinyin, pinyinColor, showPinyin)
 
     const rightAreaX = x + charBoxSize + gap
     const rightAreaWidth = rowWidth - charBoxSize - gap
 
-    const cols = Math.max(1, Math.floor((rightAreaWidth + gap) / (gridSize + gap)))
+    const cols = Math.max(1, Math.floor(rightAreaWidth / gridSize))
 
     for (let row = 0; row < rightRows; row++) {
       for (let col = 0; col < cols; col++) {
-        const gridX = rightAreaX + col * (gridSize + gap)
-        const gridY = y + row * (gridSize + gap / 2)
+        const gridX = rightAreaX + col * gridSize
+        const gridY = y + row * gridSize
         
         if (gridX + gridSize <= x + rowWidth) {
           drawMiziGrid(ctx, gridX, gridY, gridSize, gridColor)
@@ -452,7 +462,7 @@ function CopybookEditor({ config, onConfigChange }) {
     }
 
     return charBoxSize
-  }, [drawTianziGrid, drawMiziGrid])
+  }, [drawCharacterBox, drawMiziGrid])
 
   const invalidChars = useMemo(() => {
     return (inputText || '')
@@ -730,7 +740,8 @@ function CopybookEditor({ config, onConfigChange }) {
             gridColor,
             fontColor,
             pinyinColor,
-            mmToPx
+            mmToPx,
+            showPinyin
           )
         }
       }

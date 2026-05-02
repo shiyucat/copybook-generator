@@ -520,7 +520,7 @@ def export_pdf():
             )
             
             if scene_type == 'character':
-                success, message = generator.generate_character_scene(characters, output_path)
+                success, message = generator.generate_character_scene(characters, output_path, show_pinyin)
             else:
                 success, message = generator.generate_from_chars(characters, output_path)
             

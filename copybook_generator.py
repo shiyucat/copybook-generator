@@ -2970,7 +2970,7 @@ class CopybookGenerator:
         
         right_area_width = usable_width - char_box_size - gap
         
-        right_cols = max(1, int((right_area_width + gap) / (right_grid_size + gap)))
+        right_cols = max(1, int(right_area_width / right_grid_size))
         
         row_height = char_box_size + gap
         max_rows_per_page = max(1, int(usable_height / row_height))
@@ -2988,9 +2988,10 @@ class CopybookGenerator:
         }
     
     def _draw_character_box(self, c: canvas.Canvas, x: float, y: float, 
-                            character: str = "", pinyin_text: str = ""):
+                            character: str = "", pinyin_text: str = "",
+                            show_pinyin: bool = False):
         """
-        绘制生字框（田字格，4cm）
+        绘制生字框（大回字格 + 中间田字格，4cm）
         
         Args:
             c: PDF画布对象
@@ -2998,39 +2999,48 @@ class CopybookGenerator:
             y: 左下角y坐标
             character: 要显示的汉字
             pinyin_text: 拼音文本
+            show_pinyin: 是否显示拼音
         """
         size = CHARACTER_SCENE_CONFIG["CHARACTER_BOX_SIZE_MM"] * mm
+        outer_line_width = 2
+        inner_margin = size * 0.15
+        tianzi_size = size - 2 * inner_margin
+        tianzi_x = x + inner_margin
+        tianzi_y = y + inner_margin
+        
+        c.setStrokeColor(Color(0.5, 0.5, 0.5))
+        c.setLineWidth(outer_line_width)
+        c.rect(x, y, size, size)
         
         c.setStrokeColor(Color(0.5, 0.5, 0.5))
         c.setLineWidth(1.5)
-        c.rect(x, y, size, size)
+        c.rect(tianzi_x, tianzi_y, tianzi_size, tianzi_size)
         
         c.setStrokeColor(Color(0.7, 0.7, 0.7))
         c.setLineWidth(1)
-        c.line(x, y + size / 2, x + size, y + size / 2)
-        c.line(x + size / 2, y, x + size / 2, y + size)
+        c.line(tianzi_x, tianzi_y + tianzi_size / 2, tianzi_x + tianzi_size, tianzi_y + tianzi_size / 2)
+        c.line(tianzi_x + tianzi_size / 2, tianzi_y, tianzi_x + tianzi_size / 2, tianzi_y + tianzi_size)
         
-        if pinyin_text:
-            pinyin_font_size = int(size * 0.12)
+        if show_pinyin and pinyin_text:
+            pinyin_y = y + inner_margin / 2
+            pinyin_font_size = max(12, int(inner_margin * 0.6))
             c.setFillColor(Color(self.pinyin_color[0], self.pinyin_color[1], self.pinyin_color[2]))
             c.setFont(self.font_name, pinyin_font_size)
             
             pinyin_width = c.stringWidth(pinyin_text, self.font_name, pinyin_font_size)
             pinyin_x = x + (size - pinyin_width) / 2
-            pinyin_y = y + size - pinyin_font_size - 2
+            pinyin_baseline_y = pinyin_y - pinyin_font_size * 0.3
             
-            c.drawString(pinyin_x, pinyin_y, pinyin_text)
+            c.drawString(pinyin_x, pinyin_baseline_y, pinyin_text)
         
         if character:
-            char_font_size = int(size * 0.65)
+            char_font_size = int(tianzi_size * 0.7)
             c.setFillColor(Color(self.font_color[0], self.font_color[1], self.font_color[2]))
             c.setFont(self.font_name, char_font_size)
             
             text_width = c.stringWidth(character, self.font_name, char_font_size)
-            text_x = x + (size - text_width) / 2
-            text_y = y + (size - char_font_size) / 2 + (char_font_size * 0.15)
-            if pinyin_text:
-                text_y -= size * 0.05
+            text_x = tianzi_x + (tianzi_size - text_width) / 2
+            text_y = tianzi_y + (tianzi_size - char_font_size) / 2 + (char_font_size * 0.15)
             
             c.drawString(text_x, text_y, character)
     
@@ -3058,7 +3068,8 @@ class CopybookGenerator:
         c.line(x + size, y, x, y + size)
     
     def _draw_character_row(self, c: canvas.Canvas, x: float, y: float, 
-                            character: str = "", pinyin_text: str = ""):
+                            character: str = "", pinyin_text: str = "",
+                            show_pinyin: bool = False):
         """
         绘制一整行生字（生字框 + 右侧米字格）
         
@@ -3068,6 +3079,7 @@ class CopybookGenerator:
             y: 左下角y坐标
             character: 要显示的汉字
             pinyin_text: 拼音文本
+            show_pinyin: 是否显示拼音
         """
         layout = self._calculate_character_scene_layout()
         char_box_size = layout["char_box_size"]
@@ -3076,18 +3088,19 @@ class CopybookGenerator:
         right_cols = layout["right_cols"]
         right_rows = layout["right_rows"]
         
-        self._draw_character_box(c, x, y, character, pinyin_text)
+        self._draw_character_box(c, x, y, character, pinyin_text, show_pinyin)
         
         right_area_x = x + char_box_size + gap
         
         for row in range(right_rows):
             for col in range(right_cols):
-                grid_x = right_area_x + col * (right_grid_size + gap)
-                grid_y = y + row * (right_grid_size + gap / 2)
+                grid_x = right_area_x + col * right_grid_size
+                grid_y = y + row * right_grid_size
                 self._draw_mizi_grid_small(c, grid_x, grid_y)
     
     def _draw_page_character_scene(self, c: canvas.Canvas, characters: List[str],
-                                    start_char_index: int, page_num: int) -> int:
+                                    start_char_index: int, page_num: int,
+                                    show_pinyin: bool = False) -> int:
         """
         绘制生字模式的单页
         
@@ -3096,6 +3109,7 @@ class CopybookGenerator:
             characters: 字符列表
             start_char_index: 起始字符索引
             page_num: 页码
+            show_pinyin: 是否显示拼音
             
         Returns:
             int: 下一页起始字符索引
@@ -3136,7 +3150,8 @@ class CopybookGenerator:
                 self.margin_left, 
                 row_y, 
                 current_char, 
-                char_pinyin
+                char_pinyin,
+                show_pinyin
             )
             
             char_index += 1
@@ -3148,13 +3163,15 @@ class CopybookGenerator:
         
         return char_index
     
-    def generate_character_scene(self, characters: List[str], output_path: str) -> Tuple[bool, str]:
+    def generate_character_scene(self, characters: List[str], output_path: str,
+                                 show_pinyin: bool = False) -> Tuple[bool, str]:
         """
         生成生字模式的PDF字帖
         
         Args:
             characters: 要生成的字符列表
             output_path: 输出PDF文件路径
+            show_pinyin: 是否显示拼音
             
         Returns:
             Tuple[bool, str]: (是否成功, 错误信息)
@@ -3171,7 +3188,7 @@ class CopybookGenerator:
             
             while char_index < total_chars:
                 char_index = self._draw_page_character_scene(
-                    c, characters, char_index, page_num
+                    c, characters, char_index, page_num, show_pinyin
                 )
                 c.showPage()
                 page_num += 1
