@@ -32,6 +32,16 @@ const DEFAULT_GRID_COLOR = '#000000'
 const DEFAULT_FONT_COLOR = '#000000'
 const DEFAULT_PINYIN_COLOR = '#000000'
 
+const SceneType = {
+  NORMAL: 'normal',
+  CHARACTER: 'character',
+}
+
+const SceneTypeLabels = {
+  [SceneType.NORMAL]: '普通练字场景',
+  [SceneType.CHARACTER]: '生字场景',
+}
+
 function TemplateManager({ onApplyTemplate }) {
   const [templates, setTemplates] = useState([])
   const [loading, setLoading] = useState(true)
@@ -51,6 +61,7 @@ function TemplateManager({ onApplyTemplate }) {
   const [editingTemplate, setEditingTemplate] = useState(null)
   const [editForm, setEditForm] = useState({
     template_name: '',
+    scene_type: SceneType.NORMAL,
     grid_type: GridType.TIANZI,
     grid_color: DEFAULT_GRID_COLOR,
     grid_size_cm: 2.0,
@@ -128,6 +139,7 @@ function TemplateManager({ onApplyTemplate }) {
     const configData = template.config_data || {}
     setEditForm({
       template_name: template.template_name,
+      scene_type: configData.scene_type ?? SceneType.NORMAL,
       grid_type: configData.grid_type ?? GridType.TIANZI,
       grid_color: /^#[0-9A-Fa-f]{6}$/.test(configData.grid_color) ? configData.grid_color : DEFAULT_GRID_COLOR,
       grid_size_cm: configData.grid_size_cm ?? 2.0,
@@ -155,6 +167,7 @@ function TemplateManager({ onApplyTemplate }) {
       const updateData = {
         template_name: editForm.template_name.trim(),
         config_data: {
+          scene_type: editForm.scene_type,
           grid_type: editForm.grid_type,
           grid_color: editForm.grid_color,
           grid_size_cm: editForm.grid_size_cm,
@@ -411,6 +424,12 @@ function TemplateManager({ onApplyTemplate }) {
                     <div className="template-detail">
                       <h4>配置详情</h4>
                       <div className="config-grid">
+                        <div className="config-item">
+                          <span className="config-label">场景类型:</span>
+                          <span className="config-value">
+                            {SceneTypeLabels[configData.scene_type] || '普通练字场景'}
+                          </span>
+                        </div>
                         {configData.input_text && (
                           <div className="config-item" style={{ gridColumn: 'span 2' }}>
                             <span className="config-label">文字内容:</span>
@@ -426,76 +445,80 @@ function TemplateManager({ onApplyTemplate }) {
                             </span>
                           </div>
                         )}
-                        <div className="config-item">
-                          <span className="config-label">格子大小:</span>
-                          <span className="config-value">
-                            {configData.grid_size_cm || '2.0'} cm
-                          </span>
-                        </div>
-                        <div className="config-item">
-                          <span className="config-label">格子类型:</span>
-                          <span className="config-value">
-                            {configData.grid_type || '田字格'}
-                          </span>
-                        </div>
-                        <div className="config-item">
-                          <span className="config-label">每个字的行数:</span>
-                          <span className="config-value">
-                            {linesPerChar} 行
-                          </span>
-                        </div>
-                        <div className="config-item">
-                          <span className="config-label">拼音显示:</span>
-                          <span className="config-value">
-                            {showPinyin ? '开启' : '关闭'}
-                          </span>
-                        </div>
-                        {showPinyin && (
-                          <div className="config-item">
-                            <span className="config-label">拼音颜色:</span>
-                            <span className="config-value">
-                              <span
-                                className="color-swatch-small"
-                                style={{
-                                  display: 'inline-block',
-                                  width: '16px',
-                                  height: '16px',
-                                  borderRadius: '3px',
-                                  backgroundColor: configData.pinyin_color || '#000000',
-                                  marginRight: '6px',
-                                  verticalAlign: 'middle',
-                                  border: '1px solid #ddd',
-                                }}
-                              />
-                              {configData.pinyin_color || '#000000'}
-                            </span>
-                          </div>
+                        {configData.scene_type !== SceneType.CHARACTER && (
+                          <>
+                            <div className="config-item">
+                              <span className="config-label">格子大小:</span>
+                              <span className="config-value">
+                                {configData.grid_size_cm || '2.0'} cm
+                              </span>
+                            </div>
+                            <div className="config-item">
+                              <span className="config-label">格子类型:</span>
+                              <span className="config-value">
+                                {configData.grid_type || '田字格'}
+                              </span>
+                            </div>
+                            <div className="config-item">
+                              <span className="config-label">每个字的行数:</span>
+                              <span className="config-value">
+                                {linesPerChar} 行
+                              </span>
+                            </div>
+                            <div className="config-item">
+                              <span className="config-label">拼音显示:</span>
+                              <span className="config-value">
+                                {showPinyin ? '开启' : '关闭'}
+                              </span>
+                            </div>
+                            {showPinyin && (
+                              <div className="config-item">
+                                <span className="config-label">拼音颜色:</span>
+                                <span className="config-value">
+                                  <span
+                                    className="color-swatch-small"
+                                    style={{
+                                      display: 'inline-block',
+                                      width: '16px',
+                                      height: '16px',
+                                      borderRadius: '3px',
+                                      backgroundColor: configData.pinyin_color || '#000000',
+                                      marginRight: '6px',
+                                      verticalAlign: 'middle',
+                                      border: '1px solid #ddd',
+                                    }}
+                                  />
+                                  {configData.pinyin_color || '#000000'}
+                                </span>
+                              </div>
+                            )}
+                            <div className="config-item">
+                              <span className="config-label">格子颜色:</span>
+                              <span className="config-value">
+                                <span
+                                  className="color-swatch-small"
+                                  style={{
+                                    display: 'inline-block',
+                                    width: '16px',
+                                    height: '16px',
+                                    borderRadius: '3px',
+                                    backgroundColor: configData.grid_color || '#000000',
+                                    marginRight: '6px',
+                                    verticalAlign: 'middle',
+                                    border: '1px solid #ddd',
+                                  }}
+                                />
+                                {configData.grid_color || '#000000'}
+                              </span>
+                            </div>
+                            <div className="config-item">
+                              <span className="config-label">字体样式:</span>
+                              <span className="config-value">
+                                {configData.font_style === 'xingkai' ? '行楷' : '正楷'}
+                              </span>
+                            </div>
+                          </>
                         )}
-                        <div className="config-item">
-                          <span className="config-label">格子颜色:</span>
-                          <span className="config-value">
-                            <span
-                              className="color-swatch-small"
-                              style={{
-                                display: 'inline-block',
-                                width: '16px',
-                                height: '16px',
-                                borderRadius: '3px',
-                                backgroundColor: configData.grid_color || '#000000',
-                                marginRight: '6px',
-                                verticalAlign: 'middle',
-                                border: '1px solid #ddd',
-                              }}
-                            />
-                            {configData.grid_color || '#000000'}
-                          </span>
-                        </div>
-                        <div className="config-item">
-                          <span className="config-label">字体样式:</span>
-                          <span className="config-value">
-                            {configData.font_style === 'xingkai' ? '行楷' : '正楷'}
-                          </span>
-                        </div>
                         {configData.page_size && (
                           <div className="config-item">
                             <span className="config-label">页面大小:</span>
@@ -564,166 +587,185 @@ function TemplateManager({ onApplyTemplate }) {
               </div>
 
               <div className="form-group">
-                <label className="form-label">格子类型</label>
+                <label className="form-label">场景类型</label>
                 <select
                   className="form-select"
-                  value={editForm.grid_type}
-                  onChange={(e) => handleEditFormChange('grid_type', e.target.value)}
+                  value={editForm.scene_type}
+                  onChange={(e) => handleEditFormChange('scene_type', e.target.value)}
                 >
-                  <option value={GridType.TIANZI}>田字格</option>
-                  <option value={GridType.MIZI}>米字格</option>
-                  <option value={GridType.HUIGONG}>回宫格</option>
-                  <option value={GridType.FANGGE}>方格</option>
-                </select>
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">格子大小</label>
-                <select
-                  className="form-select"
-                  value={editForm.grid_size_cm}
-                  onChange={(e) => handleEditFormChange('grid_size_cm', parseFloat(e.target.value))}
-                >
-                  {GridSizeOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
+                  {Object.entries(SceneTypeLabels).map(([key, label]) => (
+                    <option key={key} value={key}>
+                      {label}
                     </option>
                   ))}
                 </select>
               </div>
 
-              <div className="form-group">
-                <label className="form-label">每个字的行数</label>
-                <input
-                  type="number"
-                  className="form-input"
-                  value={editForm.lines_per_char}
-                  onChange={(e) => {
-                    const val = parseInt(e.target.value, 10)
-                    if (!isNaN(val) && val >= 1 && val <= 50) {
-                      handleEditFormChange('lines_per_char', val)
-                    } else if (e.target.value === '') {
-                      handleEditFormChange('lines_per_char', 1)
-                    }
-                  }}
-                  min={1}
-                  max={50}
-                  placeholder="请输入行数（1-50）"
-                />
-              </div>
+              {editForm.scene_type !== SceneType.CHARACTER && (
+                <>
+                  <div className="form-group">
+                    <label className="form-label">格子类型</label>
+                    <select
+                      className="form-select"
+                      value={editForm.grid_type}
+                      onChange={(e) => handleEditFormChange('grid_type', e.target.value)}
+                    >
+                      <option value={GridType.TIANZI}>田字格</option>
+                      <option value={GridType.MIZI}>米字格</option>
+                      <option value={GridType.HUIGONG}>回宫格</option>
+                      <option value={GridType.FANGGE}>方格</option>
+                    </select>
+                  </div>
 
-              <div className="form-group">
-                <label className="checkbox-label">
-                  <input
-                    type="checkbox"
-                    checked={editForm.show_pinyin}
-                    onChange={(e) => handleEditFormChange('show_pinyin', e.target.checked)}
-                    className="checkbox-input"
-                  />
-                  <span className="checkbox-text">显示拼音</span>
-                </label>
-              </div>
+                  <div className="form-group">
+                    <label className="form-label">格子大小</label>
+                    <select
+                      className="form-select"
+                      value={editForm.grid_size_cm}
+                      onChange={(e) => handleEditFormChange('grid_size_cm', parseFloat(e.target.value))}
+                    >
+                      {GridSizeOptions.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
 
-              {editForm.show_pinyin && (
-                <div className="form-group">
-                  <label className="form-label">拼音颜色</label>
-                  <div className="color-input-row">
+                  <div className="form-group">
+                    <label className="form-label">每个字的行数</label>
                     <input
-                      type="color"
-                      className="color-picker-input"
-                      value={editForm.pinyin_color}
-                      onChange={(e) => handleEditFormChange('pinyin_color', e.target.value)}
-                    />
-                    <input
-                      type="text"
-                      className="form-input color-hex-input"
-                      value={editForm.pinyin_color}
+                      type="number"
+                      className="form-input"
+                      value={editForm.lines_per_char}
                       onChange={(e) => {
-                        const val = e.target.value
-                        if (/^#[0-9A-Fa-f]{0,6}$/.test(val)) {
-                          handleEditFormChange('pinyin_color', val.length === 7 ? val : editForm.pinyin_color)
+                        const val = parseInt(e.target.value, 10)
+                        if (!isNaN(val) && val >= 1 && val <= 50) {
+                          handleEditFormChange('lines_per_char', val)
+                        } else if (e.target.value === '') {
+                          handleEditFormChange('lines_per_char', 1)
                         }
                       }}
-                      onBlur={(e) => {
-                        const val = e.target.value
-                        if (/^#[0-9A-Fa-f]{6}$/.test(val)) {
-                          handleEditFormChange('pinyin_color', val)
-                        }
-                      }}
+                      min={1}
+                      max={50}
+                      placeholder="请输入行数（1-50）"
                     />
                   </div>
-                </div>
+
+                  <div className="form-group">
+                    <label className="checkbox-label">
+                      <input
+                        type="checkbox"
+                        checked={editForm.show_pinyin}
+                        onChange={(e) => handleEditFormChange('show_pinyin', e.target.checked)}
+                        className="checkbox-input"
+                      />
+                      <span className="checkbox-text">显示拼音</span>
+                    </label>
+                  </div>
+
+                  {editForm.show_pinyin && (
+                    <div className="form-group">
+                      <label className="form-label">拼音颜色</label>
+                      <div className="color-input-row">
+                        <input
+                          type="color"
+                          className="color-picker-input"
+                          value={editForm.pinyin_color}
+                          onChange={(e) => handleEditFormChange('pinyin_color', e.target.value)}
+                        />
+                        <input
+                          type="text"
+                          className="form-input color-hex-input"
+                          value={editForm.pinyin_color}
+                          onChange={(e) => {
+                            const val = e.target.value
+                            if (/^#[0-9A-Fa-f]{0,6}$/.test(val)) {
+                              handleEditFormChange('pinyin_color', val.length === 7 ? val : editForm.pinyin_color)
+                            }
+                          }}
+                          onBlur={(e) => {
+                            const val = e.target.value
+                            if (/^#[0-9A-Fa-f]{6}$/.test(val)) {
+                              handleEditFormChange('pinyin_color', val)
+                            }
+                          }}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="form-group">
+                    <label className="form-label">格子颜色</label>
+                    <div className="color-input-row">
+                      <input
+                        type="color"
+                        className="color-picker-input"
+                        value={editForm.grid_color}
+                        onChange={(e) => handleEditFormChange('grid_color', e.target.value)}
+                      />
+                      <input
+                        type="text"
+                        className="form-input color-hex-input"
+                        value={editForm.grid_color}
+                        onChange={(e) => {
+                          const val = e.target.value
+                          if (/^#[0-9A-Fa-f]{0,6}$/.test(val)) {
+                            handleEditFormChange('grid_color', val.length === 7 ? val : editForm.grid_color)
+                          }
+                        }}
+                        onBlur={(e) => {
+                          const val = e.target.value
+                          if (/^#[0-9A-Fa-f]{6}$/.test(val)) {
+                            handleEditFormChange('grid_color', val)
+                          }
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">字体样式</label>
+                    <select
+                      className="form-select"
+                      value={editForm.font_style}
+                      onChange={(e) => handleEditFormChange('font_style', e.target.value)}
+                    >
+                      <option value="zhenkai">正楷</option>
+                      <option value="xingkai">行楷</option>
+                    </select>
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">字体颜色</label>
+                    <div className="color-input-row">
+                      <input
+                        type="color"
+                        className="color-picker-input"
+                        value={editForm.font_color}
+                        onChange={(e) => handleEditFormChange('font_color', e.target.value)}
+                      />
+                      <input
+                        type="text"
+                        className="form-input color-hex-input"
+                        value={editForm.font_color}
+                        onChange={(e) => {
+                          const val = e.target.value
+                          if (/^#[0-9A-Fa-f]{0,6}$/.test(val)) {
+                            handleEditFormChange('font_color', val.length === 7 ? val : editForm.font_color)
+                          }
+                        }}
+                        onBlur={(e) => {
+                          const val = e.target.value
+                          if (/^#[0-9A-Fa-f]{6}$/.test(val)) {
+                            handleEditFormChange('font_color', val)
+                          }
+                        }}
+                      />
+                    </div>
+                  </div>
+                </>
               )}
-
-              <div className="form-group">
-                <label className="form-label">格子颜色</label>
-                <div className="color-input-row">
-                  <input
-                    type="color"
-                    className="color-picker-input"
-                    value={editForm.grid_color}
-                    onChange={(e) => handleEditFormChange('grid_color', e.target.value)}
-                  />
-                  <input
-                    type="text"
-                    className="form-input color-hex-input"
-                    value={editForm.grid_color}
-                    onChange={(e) => {
-                      const val = e.target.value
-                      if (/^#[0-9A-Fa-f]{0,6}$/.test(val)) {
-                        handleEditFormChange('grid_color', val.length === 7 ? val : editForm.grid_color)
-                      }
-                    }}
-                    onBlur={(e) => {
-                      const val = e.target.value
-                      if (/^#[0-9A-Fa-f]{6}$/.test(val)) {
-                        handleEditFormChange('grid_color', val)
-                      }
-                    }}
-                  />
-                </div>
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">字体样式</label>
-                <select
-                  className="form-select"
-                  value={editForm.font_style}
-                  onChange={(e) => handleEditFormChange('font_style', e.target.value)}
-                >
-                  <option value="zhenkai">正楷</option>
-                  <option value="xingkai">行楷</option>
-                </select>
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">字体颜色</label>
-                <div className="color-input-row">
-                  <input
-                    type="color"
-                    className="color-picker-input"
-                    value={editForm.font_color}
-                    onChange={(e) => handleEditFormChange('font_color', e.target.value)}
-                  />
-                  <input
-                    type="text"
-                    className="form-input color-hex-input"
-                    value={editForm.font_color}
-                    onChange={(e) => {
-                      const val = e.target.value
-                      if (/^#[0-9A-Fa-f]{0,6}$/.test(val)) {
-                        handleEditFormChange('font_color', val.length === 7 ? val : editForm.font_color)
-                      }
-                    }}
-                    onBlur={(e) => {
-                      const val = e.target.value
-                      if (/^#[0-9A-Fa-f]{6}$/.test(val)) {
-                        handleEditFormChange('font_color', val)
-                      }
-                    }}
-                  />
-                </div>
-              </div>
 
               <div className="form-group">
                 <label className="form-label">页面大小</label>
