@@ -11,6 +11,9 @@ const GridType = {
 const DEFAULT_GRID_COLOR = '#000000'
 const DEFAULT_FONT_COLOR = '#000000'
 const DEFAULT_PINYIN_COLOR = '#000000'
+const DEFAULT_CHARACTER_COLOR = '#000000'
+const DEFAULT_RIGHT_GRID_COLOR = '#000000'
+const DEFAULT_SHOW_CHARACTER_PINYIN = true
 
 const SceneType = {
   NORMAL: 'normal',
@@ -97,6 +100,21 @@ function CopybookEditor({ config, onConfigChange, selectedTemplateId: propSelect
   const [pinyinData, setPinyinData] = useState({})
   const [loadingPinyin, setLoadingPinyin] = useState(false)
   const [sceneType, setSceneType] = useState(safeConfig.scene_type ?? SceneType.NORMAL)
+  const [showCharacterPinyin, setShowCharacterPinyin] = useState(
+    safeConfig.show_character_pinyin !== undefined 
+      ? safeConfig.show_character_pinyin 
+      : DEFAULT_SHOW_CHARACTER_PINYIN
+  )
+  const [characterColor, setCharacterColor] = useState(
+    /^#[0-9A-Fa-f]{6}$/.test(safeConfig.character_color) 
+      ? safeConfig.character_color 
+      : DEFAULT_CHARACTER_COLOR
+  )
+  const [rightGridColor, setRightGridColor] = useState(
+    /^#[0-9A-Fa-f]{6}$/.test(safeConfig.right_grid_color) 
+      ? safeConfig.right_grid_color 
+      : DEFAULT_RIGHT_GRID_COLOR
+  )
 
   const gridSize = 60
 
@@ -135,6 +153,21 @@ function CopybookEditor({ config, onConfigChange, selectedTemplateId: propSelect
       setStudentId(String(config.student_id ?? ''))
       setClassName(String(config.class_name ?? ''))
       setPageSize(config.page_size ?? DEFAULT_PAGE_SIZE)
+      setShowCharacterPinyin(
+        config.show_character_pinyin !== undefined 
+          ? config.show_character_pinyin 
+          : DEFAULT_SHOW_CHARACTER_PINYIN
+      )
+      setCharacterColor(
+        /^#[0-9A-Fa-f]{6}$/.test(config.character_color) 
+          ? config.character_color 
+          : DEFAULT_CHARACTER_COLOR
+      )
+      setRightGridColor(
+        /^#[0-9A-Fa-f]{6}$/.test(config.right_grid_color) 
+          ? config.right_grid_color 
+          : DEFAULT_RIGHT_GRID_COLOR
+      )
     }
   }, [config])
 
@@ -175,6 +208,21 @@ function CopybookEditor({ config, onConfigChange, selectedTemplateId: propSelect
       setStudentId(String(configData.student_id ?? ''))
       setClassName(String(configData.class_name ?? ''))
       setPageSize(configData.page_size ?? DEFAULT_PAGE_SIZE)
+      setShowCharacterPinyin(
+        configData.show_character_pinyin !== undefined 
+          ? configData.show_character_pinyin 
+          : DEFAULT_SHOW_CHARACTER_PINYIN
+      )
+      setCharacterColor(
+        /^#[0-9A-Fa-f]{6}$/.test(configData.character_color) 
+          ? configData.character_color 
+          : DEFAULT_CHARACTER_COLOR
+      )
+      setRightGridColor(
+        /^#[0-9A-Fa-f]{6}$/.test(configData.right_grid_color) 
+          ? configData.right_grid_color 
+          : DEFAULT_RIGHT_GRID_COLOR
+      )
       setCurrentPage(0)
       alert('模版已应用')
     }
@@ -197,11 +245,14 @@ function CopybookEditor({ config, onConfigChange, selectedTemplateId: propSelect
       student_id: studentId,
       class_name: className,
       page_size: pageSize,
+      show_character_pinyin: showCharacterPinyin,
+      character_color: characterColor,
+      right_grid_color: rightGridColor,
     }
     if (onConfigChange) {
       onConfigChange(newConfig)
     }
-  }, [inputText, sceneType, gridType, gridColor, gridSizeCm, linesPerChar, showPinyin, pinyinColor, fontStyle, fontColor, studentName, studentId, className, pageSize, onConfigChange])
+  }, [inputText, sceneType, gridType, gridColor, gridSizeCm, linesPerChar, showPinyin, pinyinColor, fontStyle, fontColor, studentName, studentId, className, pageSize, showCharacterPinyin, characterColor, rightGridColor, onConfigChange])
 
   const hexToRgba = (hex, alpha) => {
     const validHex = /^#[0-9A-Fa-f]{6}$/.test(hex) ? hex : DEFAULT_GRID_COLOR
@@ -449,7 +500,7 @@ function CopybookEditor({ config, onConfigChange, selectedTemplateId: propSelect
     }
   }, [])
 
-  const drawCharacterRow = useCallback((ctx, x, y, rowWidth, character, pinyin, gridColor, fontColor, pinyinColor, mmToPx, showPinyin = false) => {
+  const drawCharacterRow = useCallback((ctx, x, y, rowWidth, character, pinyin, gridColor, fontColor, pinyinColor, rightGridColor, mmToPx, showPinyin = false) => {
     const charBoxSize = mmToPx(CHARACTER_SCENE_CONFIG.CHARACTER_BOX_SIZE_MM)
     const gridSize = mmToPx(CHARACTER_SCENE_CONFIG.RIGHT_GRID_SIZE_MM)
     const gap = mmToPx(CHARACTER_SCENE_CONFIG.GAP_SIZE_MM)
@@ -468,7 +519,7 @@ function CopybookEditor({ config, onConfigChange, selectedTemplateId: propSelect
         const gridY = y + row * gridSize
         
         if (gridX + gridSize <= x + rowWidth) {
-          drawMiziGrid(ctx, gridX, gridY, gridSize, gridColor)
+          drawMiziGrid(ctx, gridX, gridY, gridSize, rightGridColor)
         }
       }
     }
@@ -603,7 +654,10 @@ function CopybookEditor({ config, onConfigChange, selectedTemplateId: propSelect
   }, [validChars, pageSize, gridSizeCm, linesPerChar, calculatePageInfo, sceneType, calculateCharacterSceneLayout])
 
   useEffect(() => {
-    if ((!showPinyin && sceneType !== SceneType.CHARACTER) || validChars.length === 0) {
+    const needPinyin = (sceneType === SceneType.NORMAL && showPinyin) || 
+                       (sceneType === SceneType.CHARACTER && showCharacterPinyin)
+    
+    if (!needPinyin || validChars.length === 0) {
       setPinyinData({})
       return
     }
@@ -624,7 +678,7 @@ function CopybookEditor({ config, onConfigChange, selectedTemplateId: propSelect
     }
 
     fetchPinyin()
-  }, [validChars, showPinyin, sceneType])
+  }, [validChars, showPinyin, sceneType, showCharacterPinyin])
 
   const generatePreview = useCallback(() => {
     const canvas = canvasRef.current
@@ -750,10 +804,11 @@ function CopybookEditor({ config, onConfigChange, selectedTemplateId: propSelect
             currentChar,
             charPinyin,
             gridColor,
-            fontColor,
+            characterColor,
             pinyinColor,
+            rightGridColor,
             mmToPx,
-            showPinyin
+            showCharacterPinyin
           )
         }
       }
@@ -813,7 +868,7 @@ function CopybookEditor({ config, onConfigChange, selectedTemplateId: propSelect
     }
 
     ctx.restore()
-  }, [validChars, gridType, gridColor, drawGrid, drawCharacterRow, calculateCharacterSceneLayout, pageSize, studentName, studentId, className, gridSizeCm, linesPerChar, currentPage, pinyinData, showPinyin, fontColor, pinyinColor, calculatePageInfo, sceneType])
+  }, [validChars, gridType, gridColor, drawGrid, drawCharacterRow, calculateCharacterSceneLayout, pageSize, studentName, studentId, className, gridSizeCm, linesPerChar, currentPage, pinyinData, showPinyin, fontColor, pinyinColor, calculatePageInfo, sceneType, showCharacterPinyin, characterColor, rightGridColor])
 
   useEffect(() => {
     if (currentPage >= totalPages && totalPages > 0) {
@@ -874,6 +929,9 @@ function CopybookEditor({ config, onConfigChange, selectedTemplateId: propSelect
           student_id: studentId,
           class_name: className,
           page_size: pageSize,
+          show_character_pinyin: showCharacterPinyin,
+          character_color: characterColor,
+          right_grid_color: rightGridColor,
         },
       }
       await templateApi.create(templateData)
@@ -919,6 +977,9 @@ function CopybookEditor({ config, onConfigChange, selectedTemplateId: propSelect
         student_id: studentId,
         class_name: className,
         page_size: pageSize,
+        show_character_pinyin: showCharacterPinyin,
+        character_color: characterColor,
+        right_grid_color: rightGridColor,
       }
       await exportApi.exportPdf(exportData)
       setShowExportDialog(false)
@@ -1220,6 +1281,141 @@ function CopybookEditor({ config, onConfigChange, selectedTemplateId: propSelect
               </div>
             </div>
           </>
+        )}
+
+        {sceneType === SceneType.CHARACTER && (
+          <div className="section">
+            <h3 className="section-title">拼音显示</h3>
+            <div className="form-group">
+              <label className="checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={showCharacterPinyin}
+                  onChange={(e) => setShowCharacterPinyin(e.target.checked)}
+                  className="checkbox-input"
+                />
+                <span className="checkbox-text">显示拼音（开启后在生字框上方显示）</span>
+              </label>
+            </div>
+
+            {showCharacterPinyin && (
+              <div className="form-group">
+                <h3 className="section-title" style={{ marginTop: '12px', marginBottom: '8px' }}>拼音颜色</h3>
+                <div className="color-input-row">
+                  <input
+                    type="color"
+                    className="color-picker-input"
+                    value={pinyinColor}
+                    onChange={(e) => setPinyinColor(e.target.value)}
+                  />
+                  <input
+                    type="text"
+                    className="form-input color-hex-input"
+                    value={pinyinColor}
+                    onChange={(e) => {
+                      const val = e.target.value
+                      if (/^#[0-9A-Fa-f]{0,6}$/.test(val)) {
+                        setPinyinColor(val.length === 7 ? val : pinyinColor)
+                      }
+                    }}
+                    onBlur={(e) => {
+                      const val = e.target.value
+                      if (/^#[0-9A-Fa-f]{6}$/.test(val)) {
+                        setPinyinColor(val)
+                      }
+                    }}
+                  />
+                </div>
+              </div>
+            )}
+
+            <h3 className="section-title" style={{ marginTop: '16px' }}>生字颜色</h3>
+            <div className="form-group">
+              <div className="color-input-row">
+                <input
+                  type="color"
+                  className="color-picker-input"
+                  value={characterColor}
+                  onChange={(e) => setCharacterColor(e.target.value)}
+                />
+                <input
+                  type="text"
+                  className="form-input color-hex-input"
+                  value={characterColor}
+                  onChange={(e) => {
+                    const val = e.target.value
+                    if (/^#[0-9A-Fa-f]{0,6}$/.test(val)) {
+                      setCharacterColor(val.length === 7 ? val : characterColor)
+                    }
+                  }}
+                  onBlur={(e) => {
+                    const val = e.target.value
+                    if (/^#[0-9A-Fa-f]{6}$/.test(val)) {
+                      setCharacterColor(val)
+                    }
+                  }}
+                />
+              </div>
+            </div>
+
+            <h3 className="section-title" style={{ marginTop: '16px' }}>右侧格子颜色</h3>
+            <div className="form-group">
+              <div className="color-input-row">
+                <input
+                  type="color"
+                  className="color-picker-input"
+                  value={rightGridColor}
+                  onChange={(e) => setRightGridColor(e.target.value)}
+                />
+                <input
+                  type="text"
+                  className="form-input color-hex-input"
+                  value={rightGridColor}
+                  onChange={(e) => {
+                    const val = e.target.value
+                    if (/^#[0-9A-Fa-f]{0,6}$/.test(val)) {
+                      setRightGridColor(val.length === 7 ? val : rightGridColor)
+                    }
+                  }}
+                  onBlur={(e) => {
+                    const val = e.target.value
+                    if (/^#[0-9A-Fa-f]{6}$/.test(val)) {
+                      setRightGridColor(val)
+                    }
+                  }}
+                />
+              </div>
+            </div>
+
+            <h3 className="section-title" style={{ marginTop: '16px' }}>左侧生字框颜色</h3>
+            <div className="form-group">
+              <div className="color-input-row">
+                <input
+                  type="color"
+                  className="color-picker-input"
+                  value={gridColor}
+                  onChange={(e) => setGridColor(e.target.value)}
+                />
+                <input
+                  type="text"
+                  className="form-input color-hex-input"
+                  value={gridColor}
+                  onChange={(e) => {
+                    const val = e.target.value
+                    if (/^#[0-9A-Fa-f]{0,6}$/.test(val)) {
+                      setGridColor(val.length === 7 ? val : gridColor)
+                    }
+                  }}
+                  onBlur={(e) => {
+                    const val = e.target.value
+                    if (/^#[0-9A-Fa-f]{6}$/.test(val)) {
+                      setGridColor(val)
+                    }
+                  }}
+                />
+              </div>
+            </div>
+          </div>
         )}
 
         <div className="section">

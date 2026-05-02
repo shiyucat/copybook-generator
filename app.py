@@ -500,6 +500,18 @@ def export_pdf():
             pinyin_color_hex = '#000000'
         pinyin_color = hex_to_rgb(pinyin_color_hex)
         
+        show_character_pinyin = data.get('show_character_pinyin', True)
+        
+        character_color_hex = data.get('character_color', '#000000')
+        if not isinstance(character_color_hex, str) or not re.match(r'^#[0-9A-Fa-f]{6}$', character_color_hex):
+            character_color_hex = '#000000'
+        character_color = hex_to_rgb(character_color_hex)
+        
+        right_grid_color_hex = data.get('right_grid_color', '#000000')
+        if not isinstance(right_grid_color_hex, str) or not re.match(r'^#[0-9A-Fa-f]{6}$', right_grid_color_hex):
+            right_grid_color_hex = '#000000'
+        right_grid_color = hex_to_rgb(right_grid_color_hex)
+        
         import tempfile
         with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as tmp:
             output_path = tmp.name
@@ -511,16 +523,19 @@ def export_pdf():
                 font_style=font_style,
                 font_color=font_color,
                 pinyin_color=pinyin_color,
+                character_color=character_color,
+                right_grid_color=right_grid_color,
                 grid_size_cm=grid_size_cm,
                 lines_per_char=lines_per_char,
                 show_pinyin=show_pinyin,
+                show_character_pinyin=show_character_pinyin,
                 student_name=student_name,
                 student_id=student_id,
                 class_name=class_name
             )
             
             if scene_type == 'character':
-                success, message = generator.generate_character_scene(characters, output_path, show_pinyin)
+                success, message = generator.generate_character_scene(characters, output_path)
             else:
                 success, message = generator.generate_from_chars(characters, output_path)
             
