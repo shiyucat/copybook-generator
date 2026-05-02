@@ -54,6 +54,13 @@ const PRINT_CONFIG = {
   BORDER_RATIO: 0.1,
 }
 
+const CHARACTER_SCENE_CONFIG = {
+  CHARACTER_BOX_SIZE_MM: 40,
+  RIGHT_GRID_SIZE_MM: 20,
+  GAP_SIZE_MM: 2,
+  RIGHT_GRID_ROWS: 2,
+}
+
 function CopybookEditor({ config, onConfigChange }) {
   const canvasRef = useRef(null)
   const safeConfig = config && typeof config === 'object' ? config : {}
@@ -345,101 +352,107 @@ function CopybookEditor({ config, onConfigChange }) {
     }
   }, [])
 
-  const drawCharacterScene = useCallback((ctx, x, y, totalWidth, totalHeight, character, pinyin, gridColor, fontColor, pinyinColor) => {
-    const outerMargin = totalWidth * 0.05
-    const leftBoxRatio = 0.45
-    const leftBoxWidth = totalWidth * leftBoxRatio
-    const innerBoxSize = Math.min(leftBoxWidth - 2 * outerMargin, totalHeight * 0.9)
-    
-    const leftBoxX = x + outerMargin
-    const leftBoxY = y + (totalHeight - innerBoxSize) / 2
-
-    ctx.strokeStyle = hexToRgba(gridColor, 0.8)
-    ctx.lineWidth = 2
-    ctx.strokeRect(leftBoxX, leftBoxY, innerBoxSize, innerBoxSize)
-
-    const innerMargin = innerBoxSize * 0.15
-    const tianziX = leftBoxX + innerMargin
-    const tianziY = leftBoxY + innerMargin
-    const tianziSize = innerBoxSize - 2 * innerMargin
-
-    ctx.strokeStyle = hexToRgba(gridColor, 0.8)
+  const drawTianziGrid = useCallback((ctx, x, y, size, color, character = '', fontColor = DEFAULT_FONT_COLOR, pinyin = '', pinyinColor = DEFAULT_PINYIN_COLOR) => {
+    ctx.strokeStyle = hexToRgba(color, 0.8)
     ctx.lineWidth = 1.5
-    ctx.strokeRect(tianziX, tianziY, tianziSize, tianziSize)
+    ctx.strokeRect(x, y, size, size)
 
-    ctx.strokeStyle = hexToRgba(gridColor, 0.5)
+    ctx.strokeStyle = hexToRgba(color, 0.5)
     ctx.lineWidth = 1
     ctx.beginPath()
-    ctx.moveTo(tianziX, tianziY + tianziSize / 2)
-    ctx.lineTo(tianziX + tianziSize, tianziY + tianziSize / 2)
+    ctx.moveTo(x, y + size / 2)
+    ctx.lineTo(x + size, y + size / 2)
     ctx.stroke()
 
     ctx.beginPath()
-    ctx.moveTo(tianziX + tianziSize / 2, tianziY)
-    ctx.lineTo(tianziX + tianziSize / 2, tianziY + tianziSize)
+    ctx.moveTo(x + size / 2, y)
+    ctx.lineTo(x + size / 2, y + size)
     ctx.stroke()
 
+    if (pinyin) {
+      const pinyinMargin = size * 0.05
+      const pinyinFontSize = Math.max(10, Math.floor(size * 0.12))
+      ctx.font = `${pinyinFontSize}px sans-serif`
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'top'
+      ctx.fillStyle = pinyinColor
+      ctx.fillText(pinyin, x + size / 2, y + pinyin + 2)
+    }
+
     if (character) {
-      const charFontSize = Math.floor(tianziSize * 0.7)
+      const charFontSize = Math.floor(size * 0.65)
       ctx.font = `${charFontSize}px sans-serif`
       ctx.textAlign = 'center'
       ctx.textBaseline = 'middle'
       ctx.fillStyle = fontColor
-      ctx.fillText(character, tianziX + tianziSize / 2, tianziY + tianziSize / 2)
+      ctx.fillText(character, x + size / 2, y + size / 2 + (pinyin ? + 3 : 0))
     }
+  }, [])
 
-    if (pinyin) {
-      const pinyinY = leftBoxY + innerMargin / 2
-      const pinyinFontSize = Math.max(12, Math.floor(innerMargin * 0.6))
-      ctx.font = `${pinyinFontSize}px sans-serif`
+  const drawMiziGrid = useCallback((ctx, x, y, size, color, character = '', fontColor = DEFAULT_FONT_COLOR) => {
+    ctx.strokeStyle = hexToRgba(color, 0.7)
+    ctx.lineWidth = 1
+    ctx.strokeRect(x, y, size, size)
+
+    ctx.strokeStyle = hexToRgba(color, 0.4)
+    ctx.lineWidth = 0.5
+
+    ctx.beginPath()
+    ctx.moveTo(x, y + size / 2)
+    ctx.lineTo(x + size, y + size / 2)
+    ctx.stroke()
+
+    ctx.beginPath()
+    ctx.moveTo(x + size / 2, y)
+    ctx.lineTo(x + size / 2, y + size)
+    ctx.stroke()
+
+    ctx.beginPath()
+    ctx.moveTo(x, y)
+    ctx.lineTo(x + size, y + size)
+    ctx.stroke()
+
+    ctx.beginPath()
+    ctx.moveTo(x + size, y)
+    ctx.lineTo(x, y + size)
+    ctx.stroke()
+
+    if (character) {
+      const charFontSize = Math.floor(size * 0.65)
+      ctx.font = `${charFontSize}px sans-serif`
       ctx.textAlign = 'center'
       ctx.textBaseline = 'middle'
-      ctx.fillStyle = pinyinColor
-      ctx.fillText(pinyin, leftBoxX + innerBoxSize / 2, pinyinY)
+      ctx.fillStyle = fontColor
+      ctx.fillText(character, x + size / 2, y + size / 2)
     }
+  }, [])
 
-    const rightAreaX = x + leftBoxWidth
-    const rightAreaWidth = totalWidth - leftBoxWidth
-    const rightGridCount = 2
-    const rightGridGap = rightAreaWidth * 0.05
-    const rightGridSize = (rightAreaWidth - outerMargin - (rightGridCount - 1) * rightGridGap) / rightGridCount
-    const adjustedGridSize = Math.min(rightGridSize, totalHeight / 2.5)
+  const drawCharacterRow = useCallback((ctx, x, y, rowWidth, character, pinyin, gridColor, fontColor, pinyinColor, mmToPx) => {
+    const charBoxSize = mmToPx(CHARACTER_SCENE_CONFIG.CHARACTER_BOX_SIZE_MM)
+    const gridSize = mmToPx(CHARACTER_SCENE_CONFIG.RIGHT_GRID_SIZE_MM)
+    const gap = mmToPx(CHARACTER_SCENE_CONFIG.GAP_SIZE_MM)
+    const rightRows = CHARACTER_SCENE_CONFIG.RIGHT_GRID_ROWS
 
-    const totalRightHeight = 2 * adjustedGridSize + adjustedGridSize * 0.3
-    const rightStartY = y + (totalHeight - totalRightHeight) / 2
+    drawTianziGrid(ctx, x, y, charBoxSize, gridColor, character, fontColor, pinyin, pinyinColor)
 
-    for (let row = 0; row < 2; row++) {
-      const gridY = rightStartY + row * (adjustedGridSize + adjustedGridSize * 0.15)
-      for (let col = 0; col < 2; col++) {
-        const gridX = rightAreaX + outerMargin + col * (adjustedGridSize + rightGridGap)
+    const rightAreaX = x + charBoxSize + gap
+    const rightAreaWidth = rowWidth - charBoxSize - gap
 
-        ctx.strokeStyle = hexToRgba(gridColor, 0.7)
-        ctx.lineWidth = 1
-        ctx.strokeRect(gridX, gridY, adjustedGridSize, adjustedGridSize)
+    const cols = Math.max(1, Math.floor((rightAreaWidth + gap) / (gridSize + gap)))
 
-        ctx.strokeStyle = hexToRgba(gridColor, 0.4)
-        ctx.lineWidth = 0.5
-        ctx.beginPath()
-        ctx.moveTo(gridX, gridY + adjustedGridSize / 2)
-        ctx.lineTo(gridX + adjustedGridSize, gridY + adjustedGridSize / 2)
-        ctx.stroke()
-
-        ctx.beginPath()
-        ctx.moveTo(gridX + adjustedGridSize / 2, gridY)
-        ctx.lineTo(gridX + adjustedGridSize / 2, gridY + adjustedGridSize)
-        ctx.stroke()
-
-        if (row === 0 && character) {
-          const charFontSize = Math.floor(adjustedGridSize * 0.7)
-          ctx.font = `${charFontSize}px sans-serif`
-          ctx.textAlign = 'center'
-          ctx.textBaseline = 'middle'
-          ctx.fillStyle = fontColor
-          ctx.fillText(character, gridX + adjustedGridSize / 2, gridY + adjustedGridSize / 2)
+    for (let row = 0; row < rightRows; row++) {
+      for (let col = 0; col < cols; col++) {
+        const gridX = rightAreaX + col * (gridSize + gap)
+        const gridY = y + row * (gridSize + gap / 2)
+        
+        if (gridX + gridSize <= x + rowWidth) {
+          drawMiziGrid(ctx, gridX, gridY, gridSize, gridColor)
         }
       }
     }
-  }, [])
+
+    return charBoxSize
+  }, [drawTianziGrid, drawMiziGrid])
 
   const invalidChars = useMemo(() => {
     return (inputText || '')
@@ -536,9 +549,27 @@ function CopybookEditor({ config, onConfigChange }) {
     }
   }, [])
 
+  const calculateCharacterSceneLayout = useCallback(() => {
+    const currentPageSize = PageSize[pageSize] || PageSize.A4
+    const usableWidthMm = currentPageSize.width - PRINT_CONFIG.MARGIN_LEFT_MM - PRINT_CONFIG.MARGIN_RIGHT_MM
+    const usableHeightMm = currentPageSize.height - PRINT_CONFIG.MARGIN_TOP_MM - PRINT_CONFIG.MARGIN_BOTTOM_MM
+    
+    const rowHeightMm = CHARACTER_SCENE_CONFIG.CHARACTER_BOX_SIZE_MM + CHARACTER_SCENE_CONFIG.GAP_SIZE_MM
+    const maxRowsPerPage = Math.max(1, Math.floor(usableHeightMm / rowHeightMm))
+    
+    return {
+      maxRowsPerPage,
+      rowHeightMm,
+      usableWidthMm,
+      usableHeightMm,
+    }
+  }, [pageSize])
+
   const totalPages = useMemo(() => {
     if (sceneType === SceneType.CHARACTER) {
-      return Math.max(1, validChars.length)
+      if (validChars.length === 0) return 1
+      const { maxRowsPerPage } = calculateCharacterSceneLayout()
+      return Math.max(1, Math.ceil(validChars.length / maxRowsPerPage))
     }
     
     const currentPageSize = PageSize[pageSize] || PageSize.A4
@@ -547,7 +578,7 @@ function CopybookEditor({ config, onConfigChange }) {
     const maxRows = Math.max(1, Math.floor(usableHeightMm / cellSizeMm))
     
     return calculatePageInfo(0, validChars, maxRows, linesPerChar).totalPages
-  }, [validChars, pageSize, gridSizeCm, linesPerChar, calculatePageInfo, sceneType])
+  }, [validChars, pageSize, gridSizeCm, linesPerChar, calculatePageInfo, sceneType, calculateCharacterSceneLayout])
 
   useEffect(() => {
     if ((!showPinyin && sceneType !== SceneType.CHARACTER) || validChars.length === 0) {
@@ -656,6 +687,8 @@ function CopybookEditor({ config, onConfigChange }) {
     ctx.fillText(infoText, headerX, headerY)
 
     if (sceneType === SceneType.CHARACTER) {
+      const { maxRowsPerPage, rowHeightMm, usableWidthMm } = calculateCharacterSceneLayout()
+      
       if (validChars.length === 0) {
         const previewAreaX = offsetX + previewMarginLeft
         const previewAreaY = offsetY + mmToPx(marginTopMm)
@@ -674,27 +707,32 @@ function CopybookEditor({ config, onConfigChange }) {
         ctx.fillStyle = '#999'
         ctx.fillText('请输入要练习的生字', previewAreaX + previewAreaWidth / 2, previewAreaY + previewAreaHeight / 2)
       } else {
-        const charIndex = Math.min(currentPage, validChars.length - 1)
-        const currentChar = validChars[charIndex]
-        const charPinyin = pinyinData[currentChar] || ''
-
+        const startCharIndex = currentPage * maxRowsPerPage
         const previewAreaX = offsetX + previewMarginLeft
-        const previewAreaY = offsetY + mmToPx(marginTopMm)
         const previewAreaWidth = mmToPx(usableWidthMm)
-        const previewAreaHeight = mmToPx(usableHeightMm)
+        const rowHeightPx = mmToPx(rowHeightMm)
 
-        drawCharacterScene(
-          ctx,
-          previewAreaX,
-          previewAreaY,
-          previewAreaWidth,
-          previewAreaHeight,
-          currentChar,
-          charPinyin,
-          gridColor,
-          fontColor,
-          pinyinColor
-        )
+        for (let rowOnPage = 0; rowOnPage < maxRowsPerPage; rowOnPage++) {
+          const charIndex = startCharIndex + rowOnPage
+          if (charIndex >= validChars.length) break
+
+          const currentChar = validChars[charIndex]
+          const charPinyin = pinyinData[currentChar] || ''
+          const rowY = offsetY + mmToPx(marginTopMm) + rowOnPage * rowHeightPx
+
+          drawCharacterRow(
+            ctx,
+            previewAreaX,
+            rowY,
+            previewAreaWidth,
+            currentChar,
+            charPinyin,
+            gridColor,
+            fontColor,
+            pinyinColor,
+            mmToPx
+          )
+        }
       }
     } else {
       if (validChars.length === 0) {
@@ -752,7 +790,7 @@ function CopybookEditor({ config, onConfigChange }) {
     }
 
     ctx.restore()
-  }, [validChars, gridType, gridColor, drawGrid, drawCharacterScene, pageSize, studentName, studentId, className, gridSizeCm, linesPerChar, currentPage, pinyinData, showPinyin, fontColor, pinyinColor, calculatePageInfo, sceneType])
+  }, [validChars, gridType, gridColor, drawGrid, drawCharacterRow, calculateCharacterSceneLayout, pageSize, studentName, studentId, className, gridSizeCm, linesPerChar, currentPage, pinyinData, showPinyin, fontColor, pinyinColor, calculatePageInfo, sceneType])
 
   useEffect(() => {
     if (currentPage >= totalPages && totalPages > 0) {
