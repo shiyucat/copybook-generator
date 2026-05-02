@@ -3037,7 +3037,7 @@ class CopybookGenerator:
         c.line(tianzi_x + tianzi_size / 2, tianzi_y, tianzi_x + tianzi_size / 2, tianzi_y + tianzi_size)
         
         if show_pinyin and pinyin_text:
-            pinyin_y = y + inner_margin / 2
+            pinyin_y = y + size - inner_margin / 2
             pinyin_font_size = max(12, int(inner_margin * 0.6))
             c.setFillColor(Color(self.pinyin_color[0], self.pinyin_color[1], self.pinyin_color[2]))
             c.setFont(self.font_name, pinyin_font_size)
