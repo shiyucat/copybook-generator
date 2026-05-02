@@ -500,6 +500,11 @@ def export_pdf():
             pinyin_color_hex = '#000000'
         pinyin_color = hex_to_rgb(pinyin_color_hex)
         
+        grid_color_hex = data.get('grid_color', '#808080')
+        if not isinstance(grid_color_hex, str) or not re.match(r'^#[0-9A-Fa-f]{6}$', grid_color_hex):
+            grid_color_hex = '#808080'
+        grid_color = hex_to_rgb(grid_color_hex)
+        
         show_character_pinyin = data.get('show_character_pinyin', True)
         
         character_color_hex = data.get('character_color', '#000000')
@@ -521,6 +526,7 @@ def export_pdf():
                 paper_size=paper_size,
                 grid_type=grid_type_code,
                 font_style=font_style,
+                grid_color=grid_color,
                 font_color=font_color,
                 pinyin_color=pinyin_color,
                 character_color=character_color,
