@@ -521,6 +521,11 @@ def export_pdf():
         if right_grid_type not in ['田字格', '米字格', '回宫格', '方格']:
             right_grid_type = '米字格'
         
+        stroke_order_color_hex = data.get('stroke_order_color', '#000000')
+        if not isinstance(stroke_order_color_hex, str) or not re.match(r'^#[0-9A-Fa-f]{6}$', stroke_order_color_hex):
+            stroke_order_color_hex = '#000000'
+        stroke_order_color = hex_to_rgb(stroke_order_color_hex)
+        
         import tempfile
         with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as tmp:
             output_path = tmp.name
@@ -536,6 +541,7 @@ def export_pdf():
                 character_color=character_color,
                 right_grid_color=right_grid_color,
                 right_grid_type=right_grid_type,
+                stroke_order_color=stroke_order_color,
                 grid_size_cm=grid_size_cm,
                 lines_per_char=lines_per_char,
                 show_pinyin=show_pinyin,
@@ -582,6 +588,7 @@ def export_pdf():
                     'character_color': character_color_hex,
                     'right_grid_color': right_grid_color_hex,
                     'right_grid_type': right_grid_type,
+                    'stroke_order_color': stroke_order_color_hex,
                     'characters': characters,
                     'input_text': input_text,
                 }
@@ -849,6 +856,7 @@ def re_export_from_history(history_id):
         character_color_hex = config_data.get('character_color', '#000000')
         right_grid_color_hex = config_data.get('right_grid_color', '#000000')
         right_grid_type = config_data.get('right_grid_type', '米字格')
+        stroke_order_color_hex = config_data.get('stroke_order_color', '#000000')
         
         if grid_type in ['田字格', 'tianzi']:
             grid_type_code = 'tianzi'
@@ -886,6 +894,10 @@ def re_export_from_history(history_id):
             right_grid_color_hex = '#000000'
         right_grid_color = hex_to_rgb(right_grid_color_hex)
         
+        if not isinstance(stroke_order_color_hex, str) or not re.match(r'^#[0-9A-Fa-f]{6}$', stroke_order_color_hex):
+            stroke_order_color_hex = '#000000'
+        stroke_order_color = hex_to_rgb(stroke_order_color_hex)
+        
         import tempfile
         with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as tmp:
             output_path = tmp.name
@@ -901,6 +913,7 @@ def re_export_from_history(history_id):
                 character_color=character_color,
                 right_grid_color=right_grid_color,
                 right_grid_type=right_grid_type,
+                stroke_order_color=stroke_order_color,
                 grid_size_cm=grid_size_cm,
                 lines_per_char=lines_per_char,
                 show_pinyin=show_pinyin,
