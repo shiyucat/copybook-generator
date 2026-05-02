@@ -528,41 +528,85 @@ class TemplateDatabase:
         Returns:
             历史记录ID
         """
-        existing = self.find_same_export_history(history)
-        
-        if existing:
-            self.increment_export_count(existing.history_id)
-            return existing.history_id
-        
         conn = self._get_connection()
         cursor = conn.cursor()
         
         now = datetime.now().isoformat()
         
-        cursor.execute("""
-            INSERT INTO export_history (
-                scene_type, student_name, student_id, input_text, 
-                page_size, export_count, config_data, created_at, updated_at
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (
-            history.scene_type,
-            history.student_name,
-            history.student_id,
-            history.input_text,
-            history.page_size,
-            1,
-            json.dumps(history.config_data, ensure_ascii=False),
-            now,
-            now
-        ))
-        
-        history_id = cursor.lastrowid
-        
-        conn.commit()
-        conn.close()
-        
-        return history_id
+        try:
+            # 开始事务，确保原子性操作
+            conn.execute('BEGIN TRANSACTION')
+            
+            # 检查是否存在相同记录（使用FOR UPDATE防止并发问题）
+            cursor.execute("""
+                SELECT 
+                    id as history_id,
+                    scene_type,
+                    student_name,
+                    student_id,
+                    input_text,
+                    page_size,
+                    export_count,
+                    config_data,
+                    created_at,
+                    updated_at
+                FROM export_history 
+                WHERE scene_type = ? 
+                  AND student_name = ? 
+                  AND student_id = ? 
+                  AND input_text = ? 
+                  AND page_size = ?
+                LIMIT 1
+                FOR UPDATE
+            """, (
+                history.scene_type,
+                history.student_name,
+                history.student_id,
+                history.input_text,
+                history.page_size
+            ))
+            
+            row = cursor.fetchone()
+            
+            if row:
+                # 存在相同记录，更新导出次数
+                cursor.execute("""
+                    UPDATE export_history 
+                    SET export_count = export_count + 1, updated_at = ?
+                    WHERE id = ?
+                """, (now, row[0]))
+                conn.commit()
+                conn.close()
+                return row[0]
+            else:
+                # 不存在相同记录，创建新记录
+                cursor.execute("""
+                    INSERT INTO export_history (
+                        scene_type, student_name, student_id, input_text, 
+                        page_size, export_count, config_data, created_at, updated_at
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    history.scene_type,
+                    history.student_name,
+                    history.student_id,
+                    history.input_text,
+                    history.page_size,
+                    1,
+                    json.dumps(history.config_data, ensure_ascii=False),
+                    now,
+                    now
+                ))
+                
+                history_id = cursor.lastrowid
+                conn.commit()
+                conn.close()
+                return history_id
+                
+        except Exception as e:
+            conn.rollback()
+            conn.close()
+            raise e
     
     def increment_export_count(self, history_id: int) -> bool:
         """
