@@ -75,6 +75,46 @@ function App() {
     alert('模版已应用')
   }, [currentConfig])
 
+  const handleApplyExportHistory = useCallback((historyItem) => {
+    if (!historyItem || !historyItem.config_data) {
+      alert('历史记录数据无效')
+      return
+    }
+    
+    const safeConfig = historyItem.config_data && typeof historyItem.config_data === 'object' 
+      ? historyItem.config_data 
+      : {}
+    
+    const mergedConfig = {
+      ...currentConfig,
+      input_text: safeConfig.input_text ?? DEFAULT_CONFIG.input_text,
+      scene_type: safeConfig.scene_type ?? DEFAULT_CONFIG.scene_type,
+      grid_type: safeConfig.grid_type ?? DEFAULT_CONFIG.grid_type,
+      grid_color: safeConfig.grid_color ?? DEFAULT_CONFIG.grid_color,
+      grid_size: safeConfig.grid_size ?? DEFAULT_CONFIG.grid_size,
+      grid_size_cm: safeConfig.grid_size_cm ?? DEFAULT_CONFIG.grid_size_cm,
+      lines_per_char: safeConfig.lines_per_char ?? DEFAULT_CONFIG.lines_per_char,
+      show_pinyin: safeConfig.show_pinyin ?? DEFAULT_CONFIG.show_pinyin,
+      pinyin_color: safeConfig.pinyin_color ?? DEFAULT_CONFIG.pinyin_color,
+      font_style: safeConfig.font_style ?? DEFAULT_CONFIG.font_style,
+      font_color: safeConfig.font_color ?? DEFAULT_CONFIG.font_color,
+      student_name: String(safeConfig.student_name ?? DEFAULT_CONFIG.student_name),
+      student_id: String(safeConfig.student_id ?? DEFAULT_CONFIG.student_id),
+      class_name: String(safeConfig.class_name ?? DEFAULT_CONFIG.class_name),
+      page_size: safeConfig.page_size ?? DEFAULT_CONFIG.page_size,
+      show_character_pinyin: safeConfig.show_character_pinyin !== undefined 
+        ? safeConfig.show_character_pinyin 
+        : DEFAULT_CONFIG.show_character_pinyin,
+      character_color: safeConfig.character_color ?? DEFAULT_CONFIG.character_color,
+      right_grid_color: safeConfig.right_grid_color ?? DEFAULT_CONFIG.right_grid_color,
+      right_grid_type: safeConfig.right_grid_type ?? DEFAULT_CONFIG.right_grid_type,
+    }
+    setCurrentConfig(mergedConfig)
+    setSelectedTemplateId(null)
+    setActivePage('editor')
+    alert('已加载历史配置，可在编辑页面修改')
+  }, [currentConfig])
+
   return (
     <div className="app">
       <Sidebar activePage={activePage} onPageChange={setActivePage} />
@@ -94,7 +134,9 @@ function App() {
           />
         )}
         {activePage === 'history' && (
-          <ExportHistory />
+          <ExportHistory 
+            onEditHistory={handleApplyExportHistory}
+          />
         )}
       </main>
     </div>

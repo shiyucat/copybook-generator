@@ -141,8 +141,12 @@ export const pinyinApi = {
 }
 
 export const exportHistoryApi = {
-  async getPaginated(page = 1, pageSize = 10) {
-    const response = await fetch(`${API_BASE}/export-history?page=${page}&page_size=${pageSize}`)
+  async getPaginated(page = 1, pageSize = 10, keyword = '') {
+    let url = `${API_BASE}/export-history?page=${page}&page_size=${pageSize}`
+    if (keyword) {
+      url += `&keyword=${encodeURIComponent(keyword)}`
+    }
+    const response = await fetch(url)
     if (!response.ok) throw new Error('获取导出历史失败')
     const data = await response.json()
     if (!data.success) throw new Error(data.error || '获取导出历史失败')
