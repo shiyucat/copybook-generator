@@ -6,6 +6,7 @@ import './App.css'
 
 const DEFAULT_CONFIG = {
   input_text: '',
+  scene_type: 'normal',
   grid_type: '田字格',
   grid_color: '#000000',
   grid_size: 60,
@@ -24,15 +25,25 @@ const DEFAULT_CONFIG = {
 function App() {
   const [activePage, setActivePage] = useState('editor')
   const [currentConfig, setCurrentConfig] = useState({ ...DEFAULT_CONFIG })
+  const [selectedTemplateId, setSelectedTemplateId] = useState(null)
 
   const handleConfigChange = useCallback((newConfig) => {
     setCurrentConfig(newConfig)
   }, [])
 
-  const handleApplyTemplate = useCallback((templateConfig) => {
-    const safeConfig = templateConfig && typeof templateConfig === 'object' ? templateConfig : {}
+  const handleApplyTemplate = useCallback((template) => {
+    if (!template || !template.config_data) {
+      alert('模版数据无效')
+      return
+    }
+    
+    const safeConfig = template.config_data && typeof template.config_data === 'object' 
+      ? template.config_data 
+      : {}
+    
     const mergedConfig = {
       ...currentConfig,
+      scene_type: safeConfig.scene_type ?? DEFAULT_CONFIG.scene_type,
       grid_type: safeConfig.grid_type ?? DEFAULT_CONFIG.grid_type,
       grid_color: safeConfig.grid_color ?? DEFAULT_CONFIG.grid_color,
       grid_size: safeConfig.grid_size ?? DEFAULT_CONFIG.grid_size,
@@ -48,6 +59,7 @@ function App() {
       page_size: safeConfig.page_size ?? DEFAULT_CONFIG.page_size,
     }
     setCurrentConfig(mergedConfig)
+    setSelectedTemplateId(template.template_id)
     setActivePage('editor')
     alert('模版已应用')
   }, [currentConfig])
@@ -57,7 +69,12 @@ function App() {
       <Sidebar activePage={activePage} onPageChange={setActivePage} />
       <main className="main-content">
         {activePage === 'editor' && (
-          <CopybookEditor config={currentConfig} onConfigChange={handleConfigChange} />
+          <CopybookEditor 
+            config={currentConfig} 
+            onConfigChange={handleConfigChange}
+            selectedTemplateId={selectedTemplateId}
+            onTemplateIdChange={setSelectedTemplateId}
+          />
         )}
         {activePage === 'templates' && (
           <TemplateManager

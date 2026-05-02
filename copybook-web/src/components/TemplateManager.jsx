@@ -130,7 +130,7 @@ function TemplateManager({ onApplyTemplate }) {
 
   const handleApplyTemplate = (template) => {
     if (onApplyTemplate) {
-      onApplyTemplate(template.config_data)
+      onApplyTemplate(template)
     }
   }
 
