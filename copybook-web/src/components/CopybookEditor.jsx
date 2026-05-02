@@ -61,7 +61,7 @@ const CHARACTER_SCENE_CONFIG = {
   RIGHT_GRID_ROWS: 2,
 }
 
-function CopybookEditor({ config, onConfigChange }) {
+function CopybookEditor({ config, onConfigChange, selectedTemplateId: propSelectedTemplateId, onTemplateIdChange }) {
   const canvasRef = useRef(null)
   const safeConfig = config && typeof config === 'object' ? config : {}
   const [inputText, setInputText] = useState(String(safeConfig.input_text ?? ''))
@@ -138,8 +138,20 @@ function CopybookEditor({ config, onConfigChange }) {
     }
   }, [config])
 
+  useEffect(() => {
+    if (propSelectedTemplateId !== undefined && propSelectedTemplateId !== null) {
+      const propIdStr = String(propSelectedTemplateId)
+      if (propIdStr !== selectedTemplateId) {
+        setSelectedTemplateId(propIdStr)
+      }
+    }
+  }, [propSelectedTemplateId, selectedTemplateId])
+
   const handleSelectTemplate = useCallback((templateId) => {
     setSelectedTemplateId(templateId)
+    if (onTemplateIdChange) {
+      onTemplateIdChange(templateId ? Number(templateId) : null)
+    }
     if (!templateId) return
 
     const numericId = Number(templateId)
@@ -166,7 +178,7 @@ function CopybookEditor({ config, onConfigChange }) {
       setCurrentPage(0)
       alert('模版已应用')
     }
-  }, [templates])
+  }, [templates, onTemplateIdChange])
 
   useEffect(() => {
     const newConfig = {
