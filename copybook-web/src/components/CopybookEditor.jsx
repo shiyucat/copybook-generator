@@ -14,6 +14,7 @@ const DEFAULT_PINYIN_COLOR = '#000000'
 const DEFAULT_CHARACTER_COLOR = '#000000'
 const DEFAULT_RIGHT_GRID_COLOR = '#000000'
 const DEFAULT_SHOW_CHARACTER_PINYIN = true
+const DEFAULT_RIGHT_GRID_TYPE = '米字格'
 
 const SceneType = {
   NORMAL: 'normal',
@@ -115,6 +116,9 @@ function CopybookEditor({ config, onConfigChange, selectedTemplateId: propSelect
       ? safeConfig.right_grid_color 
       : DEFAULT_RIGHT_GRID_COLOR
   )
+  const [rightGridType, setRightGridType] = useState(
+    safeConfig.right_grid_type ?? DEFAULT_RIGHT_GRID_TYPE
+  )
 
   const gridSize = 60
 
@@ -168,6 +172,7 @@ function CopybookEditor({ config, onConfigChange, selectedTemplateId: propSelect
           ? config.right_grid_color 
           : DEFAULT_RIGHT_GRID_COLOR
       )
+      setRightGridType(config.right_grid_type ?? DEFAULT_RIGHT_GRID_TYPE)
     }
   }, [config])
 
@@ -223,6 +228,7 @@ function CopybookEditor({ config, onConfigChange, selectedTemplateId: propSelect
           ? configData.right_grid_color 
           : DEFAULT_RIGHT_GRID_COLOR
       )
+      setRightGridType(configData.right_grid_type ?? DEFAULT_RIGHT_GRID_TYPE)
       setCurrentPage(0)
       alert('模版已应用')
     }
@@ -248,11 +254,12 @@ function CopybookEditor({ config, onConfigChange, selectedTemplateId: propSelect
       show_character_pinyin: showCharacterPinyin,
       character_color: characterColor,
       right_grid_color: rightGridColor,
+      right_grid_type: rightGridType,
     }
     if (onConfigChange) {
       onConfigChange(newConfig)
     }
-  }, [inputText, sceneType, gridType, gridColor, gridSizeCm, linesPerChar, showPinyin, pinyinColor, fontStyle, fontColor, studentName, studentId, className, pageSize, showCharacterPinyin, characterColor, rightGridColor, onConfigChange])
+  }, [inputText, sceneType, gridType, gridColor, gridSizeCm, linesPerChar, showPinyin, pinyinColor, fontStyle, fontColor, studentName, studentId, className, pageSize, showCharacterPinyin, characterColor, rightGridColor, rightGridType, onConfigChange])
 
   const hexToRgba = (hex, alpha) => {
     const validHex = /^#[0-9A-Fa-f]{6}$/.test(hex) ? hex : DEFAULT_GRID_COLOR
@@ -462,45 +469,7 @@ function CopybookEditor({ config, onConfigChange, selectedTemplateId: propSelect
     }
   }, [])
 
-  const drawMiziGrid = useCallback((ctx, x, y, size, color, character = '', fontColor = DEFAULT_FONT_COLOR) => {
-    ctx.strokeStyle = hexToRgba(color, 0.7)
-    ctx.lineWidth = 1
-    ctx.strokeRect(x, y, size, size)
-
-    ctx.strokeStyle = hexToRgba(color, 0.4)
-    ctx.lineWidth = 0.5
-
-    ctx.beginPath()
-    ctx.moveTo(x, y + size / 2)
-    ctx.lineTo(x + size, y + size / 2)
-    ctx.stroke()
-
-    ctx.beginPath()
-    ctx.moveTo(x + size / 2, y)
-    ctx.lineTo(x + size / 2, y + size)
-    ctx.stroke()
-
-    ctx.beginPath()
-    ctx.moveTo(x, y)
-    ctx.lineTo(x + size, y + size)
-    ctx.stroke()
-
-    ctx.beginPath()
-    ctx.moveTo(x + size, y)
-    ctx.lineTo(x, y + size)
-    ctx.stroke()
-
-    if (character) {
-      const charFontSize = Math.floor(size * 0.65)
-      ctx.font = `${charFontSize}px sans-serif`
-      ctx.textAlign = 'center'
-      ctx.textBaseline = 'middle'
-      ctx.fillStyle = fontColor
-      ctx.fillText(character, x + size / 2, y + size / 2)
-    }
-  }, [])
-
-  const drawCharacterRow = useCallback((ctx, x, y, rowWidth, character, pinyin, gridColor, fontColor, pinyinColor, rightGridColor, mmToPx, showPinyin = false) => {
+  const drawCharacterRow = useCallback((ctx, x, y, rowWidth, character, pinyin, gridColor, fontColor, pinyinColor, rightGridColor, rightGridType, mmToPx, showPinyin = false) => {
     const charBoxSize = mmToPx(CHARACTER_SCENE_CONFIG.CHARACTER_BOX_SIZE_MM)
     const gridSize = mmToPx(CHARACTER_SCENE_CONFIG.RIGHT_GRID_SIZE_MM)
     const gap = mmToPx(CHARACTER_SCENE_CONFIG.GAP_SIZE_MM)
@@ -519,13 +488,13 @@ function CopybookEditor({ config, onConfigChange, selectedTemplateId: propSelect
         const gridY = y + row * gridSize
         
         if (gridX + gridSize <= x + rowWidth) {
-          drawMiziGrid(ctx, gridX, gridY, gridSize, rightGridColor)
+          drawGrid(ctx, gridX, gridY, gridSize, rightGridType, rightGridColor)
         }
       }
     }
 
     return charBoxSize
-  }, [drawCharacterBox, drawMiziGrid])
+  }, [drawCharacterBox, drawGrid])
 
   const invalidChars = useMemo(() => {
     return (inputText || '')
@@ -807,6 +776,7 @@ function CopybookEditor({ config, onConfigChange, selectedTemplateId: propSelect
             characterColor,
             pinyinColor,
             rightGridColor,
+            rightGridType,
             mmToPx,
             showCharacterPinyin
           )
@@ -868,7 +838,7 @@ function CopybookEditor({ config, onConfigChange, selectedTemplateId: propSelect
     }
 
     ctx.restore()
-  }, [validChars, gridType, gridColor, drawGrid, drawCharacterRow, calculateCharacterSceneLayout, pageSize, studentName, studentId, className, gridSizeCm, linesPerChar, currentPage, pinyinData, showPinyin, fontColor, pinyinColor, calculatePageInfo, sceneType, showCharacterPinyin, characterColor, rightGridColor])
+  }, [validChars, gridType, gridColor, drawGrid, drawCharacterRow, calculateCharacterSceneLayout, pageSize, studentName, studentId, className, gridSizeCm, linesPerChar, currentPage, pinyinData, showPinyin, fontColor, pinyinColor, calculatePageInfo, sceneType, showCharacterPinyin, characterColor, rightGridColor, rightGridType])
 
   useEffect(() => {
     if (currentPage >= totalPages && totalPages > 0) {
@@ -932,6 +902,7 @@ function CopybookEditor({ config, onConfigChange, selectedTemplateId: propSelect
           show_character_pinyin: showCharacterPinyin,
           character_color: characterColor,
           right_grid_color: rightGridColor,
+          right_grid_type: rightGridType,
         },
       }
       await templateApi.create(templateData)
@@ -980,6 +951,7 @@ function CopybookEditor({ config, onConfigChange, selectedTemplateId: propSelect
         show_character_pinyin: showCharacterPinyin,
         character_color: characterColor,
         right_grid_color: rightGridColor,
+        right_grid_type: rightGridType,
       }
       await exportApi.exportPdf(exportData)
       setShowExportDialog(false)
@@ -1356,6 +1328,21 @@ function CopybookEditor({ config, onConfigChange, selectedTemplateId: propSelect
                   }}
                 />
               </div>
+            </div>
+
+            <h3 className="section-title" style={{ marginTop: '16px' }}>右侧格子类型</h3>
+            <div className="form-group">
+              <select
+                className="form-select"
+                value={rightGridType}
+                onChange={(e) => setRightGridType(e.target.value)}
+              >
+                {gridTypes.map((type) => (
+                  <option key={type.value} value={type.value}>
+                    {type.label}
+                  </option>
+                ))}
+              </select>
             </div>
 
             <h3 className="section-title" style={{ marginTop: '16px' }}>右侧格子颜色</h3>
