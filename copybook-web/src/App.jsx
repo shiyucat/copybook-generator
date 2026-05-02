@@ -2,6 +2,7 @@ import React, { useState, useCallback } from 'react'
 import Sidebar from './components/Sidebar'
 import CopybookEditor from './components/CopybookEditor'
 import TemplateManager from './components/TemplateManager'
+import ExportHistory from './components/ExportHistory'
 import './App.css'
 
 const DEFAULT_CONFIG = {
@@ -91,6 +92,9 @@ function App() {
             currentConfig={currentConfig}
             onApplyTemplate={handleApplyTemplate}
           />
+        )}
+        {activePage === 'history' && (
+          <ExportHistory />
         )}
       </main>
     </div>

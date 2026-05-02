@@ -24,7 +24,7 @@ except ImportError:
     pinyin = None
     Style = None
 
-from database import TemplateDatabase, Template
+from database import TemplateDatabase, Template, ExportHistory
 from copybook_generator import (
     CopybookGenerator, 
     PAGE_SIZES, 
@@ -562,6 +562,42 @@ def export_pdf():
             
             os.unlink(output_path)
             
+            try:
+                input_text = ''.join(characters) if isinstance(characters, list) else str(characters)
+                config_data = {
+                    'scene_type': scene_type,
+                    'grid_type': grid_type,
+                    'grid_color': grid_color_hex,
+                    'grid_size_cm': grid_size_cm,
+                    'lines_per_char': lines_per_char,
+                    'show_pinyin': show_pinyin,
+                    'pinyin_color': pinyin_color_hex,
+                    'font_style': font_style,
+                    'font_color': font_color_hex,
+                    'student_name': student_name,
+                    'student_id': student_id,
+                    'class_name': class_name,
+                    'page_size': page_size_key,
+                    'show_character_pinyin': show_character_pinyin,
+                    'character_color': character_color_hex,
+                    'right_grid_color': right_grid_color_hex,
+                    'right_grid_type': right_grid_type,
+                    'characters': characters,
+                    'input_text': input_text,
+                }
+                
+                export_history = ExportHistory(
+                    scene_type=scene_type,
+                    student_name=student_name,
+                    student_id=student_id,
+                    input_text=input_text,
+                    page_size=page_size_key,
+                    config_data=config_data
+                )
+                db.save_export_history(export_history)
+            except Exception as history_err:
+                print(f"保存导出历史失败: {history_err}")
+            
             first_char = characters[0] if characters else ''
             filename = f"{first_char}_字帖.pdf" if first_char else "字帖.pdf"
             encoded_filename = urllib.parse.quote(filename)
@@ -646,6 +682,270 @@ def get_pinyin():
             'data': result
         })
         
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/export-history', methods=['GET'])
+def get_export_history():
+    """
+    获取导出历史列表（支持分页）
+    
+    Query Parameters:
+        page: 页码（从1开始，可选，不传则返回所有）
+        page_size: 每页数量（可选，默认10，可选值：10,20,50,100）
+    
+    Returns:
+        JSON 格式的导出历史列表
+    """
+    try:
+        page = request.args.get('page', type=int)
+        page_size = request.args.get('page_size', 10, type=int)
+        
+        if page is not None and page > 0:
+            page_size = max(10, min(100, page_size))
+            if page_size not in [10, 20, 50, 100]:
+                page_size = 10
+            
+            paginated = db.get_export_history_paginated(page=page, page_size=page_size)
+            
+            result = []
+            for history in paginated['history']:
+                result.append({
+                    'history_id': history.history_id,
+                    'scene_type': history.scene_type,
+                    'student_name': history.student_name,
+                    'student_id': history.student_id,
+                    'input_text': history.input_text,
+                    'page_size': history.page_size,
+                    'export_count': history.export_count,
+                    'config_data': history.config_data,
+                    'created_at': history.created_at,
+                    'updated_at': history.updated_at
+                })
+            
+            return jsonify({
+                'success': True,
+                'data': result,
+                'count': len(result),
+                'pagination': {
+                    'page': paginated['page'],
+                    'page_size': paginated['page_size'],
+                    'total': paginated['total'],
+                    'total_pages': paginated['total_pages']
+                }
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': '请指定页码参数'
+            }), 400
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/export-history/<int:history_id>', methods=['GET'])
+def get_export_history_by_id(history_id):
+    """
+    根据 ID 获取单个导出历史
+    
+    Args:
+        history_id: 历史记录 ID
+        
+    Returns:
+        JSON 格式的历史记录数据
+    """
+    try:
+        history = db.get_export_history_by_id(history_id)
+        
+        if history is None:
+            return jsonify({
+                'success': False,
+                'error': '历史记录不存在'
+            }), 404
+        
+        result = {
+            'history_id': history.history_id,
+            'scene_type': history.scene_type,
+            'student_name': history.student_name,
+            'student_id': history.student_id,
+            'input_text': history.input_text,
+            'page_size': history.page_size,
+            'export_count': history.export_count,
+            'config_data': history.config_data,
+            'created_at': history.created_at,
+            'updated_at': history.updated_at
+        }
+        
+        return jsonify({
+            'success': True,
+            'data': result
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/export-history/<int:history_id>/export', methods=['POST'])
+def re_export_from_history(history_id):
+    """
+    根据历史记录重新导出PDF
+    
+    Args:
+        history_id: 历史记录 ID
+        
+    Returns:
+        PDF文件下载
+    """
+    try:
+        history = db.get_export_history_by_id(history_id)
+        
+        if history is None:
+            return jsonify({
+                'success': False,
+                'error': '历史记录不存在'
+            }), 404
+        
+        config_data = history.config_data or {}
+        
+        characters = config_data.get('characters', [])
+        if not characters:
+            return jsonify({
+                'success': False,
+                'error': '历史记录中没有文字内容'
+            }), 400
+        
+        scene_type = config_data.get('scene_type', 'normal')
+        grid_type = config_data.get('grid_type', '田字格')
+        grid_color_hex = config_data.get('grid_color', '#808080')
+        grid_size_cm = config_data.get('grid_size_cm', DEFAULT_GRID_SIZE_CM)
+        lines_per_char = config_data.get('lines_per_char', DEFAULT_LINES_PER_CHAR)
+        show_pinyin = config_data.get('show_pinyin', DEFAULT_SHOW_PINYIN)
+        pinyin_color_hex = config_data.get('pinyin_color', '#000000')
+        font_style = config_data.get('font_style', 'zhenkai')
+        font_color_hex = config_data.get('font_color', '#000000')
+        student_name = config_data.get('student_name', '')
+        student_id = config_data.get('student_id', '')
+        class_name = config_data.get('class_name', '')
+        page_size_key = config_data.get('page_size', DEFAULT_PAGE_SIZE)
+        show_character_pinyin = config_data.get('show_character_pinyin', True)
+        character_color_hex = config_data.get('character_color', '#000000')
+        right_grid_color_hex = config_data.get('right_grid_color', '#000000')
+        right_grid_type = config_data.get('right_grid_type', '米字格')
+        
+        if grid_type in ['田字格', 'tianzi']:
+            grid_type_code = 'tianzi'
+        elif grid_type in ['米字格', 'mizi']:
+            grid_type_code = 'mizi'
+        elif grid_type in ['回宫格', 'huigong']:
+            grid_type_code = 'huigong'
+        elif grid_type in ['方格', 'fangge']:
+            grid_type_code = 'fangge'
+        else:
+            grid_type_code = 'tianzi'
+        
+        if right_grid_type not in ['田字格', '米字格', '回宫格', '方格']:
+            right_grid_type = '米字格'
+        
+        paper_size = PAGE_SIZES.get(page_size_key, PAGE_SIZES[DEFAULT_PAGE_SIZE])
+        
+        if not isinstance(grid_color_hex, str) or not re.match(r'^#[0-9A-Fa-f]{6}$', grid_color_hex):
+            grid_color_hex = '#808080'
+        grid_color = hex_to_rgb(grid_color_hex)
+        
+        if not isinstance(font_color_hex, str) or not re.match(r'^#[0-9A-Fa-f]{6}$', font_color_hex):
+            font_color_hex = '#000000'
+        font_color = hex_to_rgb(font_color_hex)
+        
+        if not isinstance(pinyin_color_hex, str) or not re.match(r'^#[0-9A-Fa-f]{6}$', pinyin_color_hex):
+            pinyin_color_hex = '#000000'
+        pinyin_color = hex_to_rgb(pinyin_color_hex)
+        
+        if not isinstance(character_color_hex, str) or not re.match(r'^#[0-9A-Fa-f]{6}$', character_color_hex):
+            character_color_hex = '#000000'
+        character_color = hex_to_rgb(character_color_hex)
+        
+        if not isinstance(right_grid_color_hex, str) or not re.match(r'^#[0-9A-Fa-f]{6}$', right_grid_color_hex):
+            right_grid_color_hex = '#000000'
+        right_grid_color = hex_to_rgb(right_grid_color_hex)
+        
+        import tempfile
+        with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as tmp:
+            output_path = tmp.name
+        
+        try:
+            generator = CopybookGenerator(
+                paper_size=paper_size,
+                grid_type=grid_type_code,
+                font_style=font_style,
+                grid_color=grid_color,
+                font_color=font_color,
+                pinyin_color=pinyin_color,
+                character_color=character_color,
+                right_grid_color=right_grid_color,
+                right_grid_type=right_grid_type,
+                grid_size_cm=grid_size_cm,
+                lines_per_char=lines_per_char,
+                show_pinyin=show_pinyin,
+                show_character_pinyin=show_character_pinyin,
+                student_name=student_name,
+                student_id=student_id,
+                class_name=class_name
+            )
+            
+            if scene_type == 'character':
+                success, message = generator.generate_character_scene(characters, output_path)
+            else:
+                success, message = generator.generate_from_chars(characters, output_path)
+            
+            if not success:
+                os.unlink(output_path)
+                return jsonify({
+                    'success': False,
+                    'error': message
+                }), 500
+            
+            with open(output_path, 'rb') as f:
+                pdf_data = f.read()
+            
+            os.unlink(output_path)
+            
+            try:
+                new_history = ExportHistory(
+                    scene_type=scene_type,
+                    student_name=student_name,
+                    student_id=student_id,
+                    input_text=history.input_text,
+                    page_size=page_size_key,
+                    config_data=config_data
+                )
+                db.save_export_history(new_history)
+            except Exception as update_err:
+                print(f"更新导出历史失败: {update_err}")
+            
+            first_char = characters[0] if characters else ''
+            filename = f"{first_char}_字帖.pdf" if first_char else "字帖.pdf"
+            encoded_filename = urllib.parse.quote(filename)
+            
+            response = make_response(pdf_data)
+            response.headers['Content-Type'] = 'application/pdf'
+            response.headers['Content-Disposition'] = f"attachment; filename*=UTF-8''{encoded_filename}"
+            
+            return response
+            
+        except Exception as e:
+            if os.path.exists(output_path):
+                os.unlink(output_path)
+            raise e
+            
     except Exception as e:
         return jsonify({
             'success': False,

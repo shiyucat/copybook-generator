@@ -575,3 +575,153 @@ body {
   padding: 16px 20px;
   border-top: 1px solid var(--border-color);
 }
+
+.export-history {
+  padding: 24px;
+  height: 100%;
+  overflow-y: auto;
+}
+
+.history-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+}
+
+.history-header h2 {
+  font-size: 22px;
+  font-weight: 600;
+}
+
+.history-table-container {
+  overflow-x: auto;
+  background-color: var(--card-bg);
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+}
+
+.history-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 900px;
+}
+
+.history-table thead {
+  background-color: #f8f9fa;
+}
+
+.history-table th,
+.history-table td {
+  padding: 12px 16px;
+  text-align: left;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.history-table th {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.history-table td {
+  font-size: 14px;
+  color: var(--text-color);
+  vertical-align: middle;
+}
+
+.history-table tbody tr:hover {
+  background-color: #f8f9fa;
+}
+
+.history-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.col-scene-type {
+  width: 120px;
+}
+
+.col-name {
+  width: 100px;
+}
+
+.col-student-id {
+  width: 120px;
+}
+
+.col-content {
+  width: 220px;
+}
+
+.col-page-size {
+  width: 100px;
+}
+
+.col-export-time {
+  width: 160px;
+}
+
+.col-export-count {
+  width: 80px;
+}
+
+.col-action {
+  width: 80px;
+}
+
+.content-cell {
+  max-width: 200px;
+}
+
+.content-text {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 200px;
+  cursor: help;
+}
+
+.scene-type-tag {
+  display: inline-block;
+  padding: 4px 10px;
+  background-color: #e3f2fd;
+  color: #1976d2;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.export-count {
+  display: inline-block;
+  padding: 2px 8px;
+  background-color: #e8f5e9;
+  color: #388e3c;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  min-width: 28px;
+  text-align: center;
+}
+
+.btn-export-action {
+  background-color: var(--primary-color);
+  color: #fff;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 16px;
+  transition: background-color 0.2s;
+}
+
+.btn-export-action:hover:not(:disabled) {
+  background-color: var(--primary-hover);
+}
+
+.btn-export-action:disabled {
+  background-color: #a0c7e8;
+  cursor: not-allowed;
+  font-size: 12px;
+}
