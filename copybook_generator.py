@@ -1385,6 +1385,7 @@ class CopybookGenerator:
                  font_path: Optional[str] = None,
                  grid_type: str = "mizi",
                  font_style: str = "zhenkai",
+                 grid_color: Tuple[float, float, float] = (0.5, 0.5, 0.5),
                  font_color: Tuple[float, float, float] = DEFAULT_FONT_COLOR,
                  pinyin_color: Tuple[float, float, float] = DEFAULT_PINYIN_COLOR,
                  character_color: Tuple[float, float, float] = DEFAULT_CHARACTER_COLOR,
@@ -1407,6 +1408,7 @@ class CopybookGenerator:
             font_path: 字体文件路径，默认使用系统字体
             grid_type: 格子类型，"mizi" 表示米字格（默认），"tianzi" 表示田字格
             font_style: 字体样式，"zhenkai" 表示正楷（默认），"xingkai" 表示行楷
+            grid_color: 格子颜色（RGB元组，值为0.0-1.0），默认灰色
             font_color: 字体颜色（RGB元组，值为0.0-1.0），默认黑色
             pinyin_color: 拼音颜色（RGB元组，值为0.0-1.0），默认黑色
             character_color: 生字颜色（RGB元组，值为0.0-1.0），默认黑色
@@ -1426,6 +1428,7 @@ class CopybookGenerator:
         
         self.grid_type = grid_type
         self.font_style = font_style
+        self.grid_color = grid_color
         self.font_color = font_color
         self.pinyin_color = pinyin_color
         self.character_color = character_color
