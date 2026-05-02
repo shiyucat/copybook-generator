@@ -12,6 +12,16 @@ const DEFAULT_GRID_COLOR = '#000000'
 const DEFAULT_FONT_COLOR = '#000000'
 const DEFAULT_PINYIN_COLOR = '#000000'
 
+const SceneType = {
+  NORMAL: 'normal',
+  CHARACTER: 'character',
+}
+
+const SceneTypeLabels = {
+  [SceneType.NORMAL]: '普通练字场景',
+  [SceneType.CHARACTER]: '生字场景',
+}
+
 const PageSize = {
   A4: { name: 'A4', width: 210, height: 297 },
   SIZE_16K: { name: '16开', width: 185, height: 260 },
@@ -79,6 +89,7 @@ function CopybookEditor({ config, onConfigChange }) {
   const [currentPage, setCurrentPage] = useState(0)
   const [pinyinData, setPinyinData] = useState({})
   const [loadingPinyin, setLoadingPinyin] = useState(false)
+  const [sceneType, setSceneType] = useState(safeConfig.scene_type ?? SceneType.NORMAL)
 
   const gridSize = 60
 
@@ -100,6 +111,7 @@ function CopybookEditor({ config, onConfigChange }) {
 
   useEffect(() => {
     if (config && typeof config === 'object') {
+      setSceneType(config.scene_type ?? SceneType.NORMAL)
       setGridType(config.grid_type ?? GridType.TIANZI)
       setGridColor(/^#[0-9A-Fa-f]{6}$/.test(config.grid_color) ? config.grid_color : DEFAULT_GRID_COLOR)
       setGridSizeCm(config.grid_size_cm ?? DEFAULT_GRID_SIZE_CM)
@@ -127,6 +139,7 @@ function CopybookEditor({ config, onConfigChange }) {
     const template = templates.find((t) => t.template_id === numericId)
     if (template && template.config_data) {
       const configData = template.config_data
+      setSceneType(configData.scene_type ?? SceneType.NORMAL)
       setGridType(configData.grid_type ?? GridType.TIANZI)
       setGridColor(/^#[0-9A-Fa-f]{6}$/.test(configData.grid_color) ? configData.grid_color : DEFAULT_GRID_COLOR)
       setGridSizeCm(configData.grid_size_cm ?? DEFAULT_GRID_SIZE_CM)
@@ -151,6 +164,7 @@ function CopybookEditor({ config, onConfigChange }) {
   useEffect(() => {
     const newConfig = {
       input_text: inputText,
+      scene_type: sceneType,
       grid_type: gridType,
       grid_color: gridColor,
       grid_size: gridSize,
@@ -168,7 +182,7 @@ function CopybookEditor({ config, onConfigChange }) {
     if (onConfigChange) {
       onConfigChange(newConfig)
     }
-  }, [inputText, gridType, gridColor, gridSizeCm, linesPerChar, showPinyin, pinyinColor, fontStyle, fontColor, studentName, studentId, className, pageSize, onConfigChange])
+  }, [inputText, sceneType, gridType, gridColor, gridSizeCm, linesPerChar, showPinyin, pinyinColor, fontStyle, fontColor, studentName, studentId, className, pageSize, onConfigChange])
 
   const hexToRgba = (hex, alpha) => {
     const validHex = /^#[0-9A-Fa-f]{6}$/.test(hex) ? hex : DEFAULT_GRID_COLOR
@@ -331,6 +345,96 @@ function CopybookEditor({ config, onConfigChange }) {
     }
   }, [])
 
+  const drawCharacterScene = useCallback((ctx, x, y, totalWidth, totalHeight, character, pinyin, gridColor, fontColor, pinyinColor) => {
+    const outerMargin = totalWidth * 0.05
+    const innerBoxSize = Math.min(totalWidth * 0.4, totalHeight * 0.9)
+    const leftBoxX = x + outerMargin
+    const leftBoxY = y + (totalHeight - innerBoxSize) / 2
+
+    ctx.strokeStyle = hexToRgba(gridColor, 0.8)
+    ctx.lineWidth = 2
+    ctx.strokeRect(leftBoxX, leftBoxY, innerBoxSize, innerBoxSize)
+
+    const innerMargin = innerBoxSize * 0.15
+    const tianziX = leftBoxX + innerMargin
+    const tianziY = leftBoxY + innerMargin
+    const tianziSize = innerBoxSize - 2 * innerMargin
+
+    ctx.strokeStyle = hexToRgba(gridColor, 0.8)
+    ctx.lineWidth = 1.5
+    ctx.strokeRect(tianziX, tianziY, tianziSize, tianziSize)
+
+    ctx.strokeStyle = hexToRgba(gridColor, 0.5)
+    ctx.lineWidth = 1
+    ctx.beginPath()
+    ctx.moveTo(tianziX, tianziY + tianziSize / 2)
+    ctx.lineTo(tianziX + tianziSize, tianziY + tianziSize / 2)
+    ctx.stroke()
+
+    ctx.beginPath()
+    ctx.moveTo(tianziX + tianziSize / 2, tianziY)
+    ctx.lineTo(tianziX + tianziSize / 2, tianziY + tianziSize)
+    ctx.stroke()
+
+    if (character) {
+      const charFontSize = Math.floor(tianziSize * 0.7)
+      ctx.font = `${charFontSize}px sans-serif`
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      ctx.fillStyle = fontColor
+      ctx.fillText(character, tianziX + tianziSize / 2, tianziY + tianziSize / 2)
+    }
+
+    if (pinyin) {
+      const pinyinY = leftBoxY + innerMargin / 2
+      const pinyinFontSize = Math.max(12, Math.floor(innerMargin * 0.6))
+      ctx.font = `${pinyinFontSize}px sans-serif`
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      ctx.fillStyle = pinyinColor
+      ctx.fillText(pinyin, leftBoxX + innerBoxSize / 2, pinyinY)
+    }
+
+    const rightStartX = leftBoxX + innerBoxSize + outerMargin
+    const rightGridSize = (totalWidth - rightStartX - x - outerMargin) / 2
+    const adjustedGridSize = Math.min(rightGridSize, totalHeight / 2.5)
+
+    const rightGridY1 = y + (totalHeight - 2 * adjustedGridSize) / 3
+    const rightGridY2 = rightGridY1 + adjustedGridSize + (totalHeight - 2 * adjustedGridSize) / 3
+
+    for (let row = 0; row < 2; row++) {
+      const gridY = row === 0 ? rightGridY1 : rightGridY2
+      for (let col = 0; col < 2; col++) {
+        const gridX = rightStartX + col * adjustedGridSize
+
+        ctx.strokeStyle = hexToRgba(gridColor, 0.7)
+        ctx.lineWidth = 1
+        ctx.strokeRect(gridX, gridY, adjustedGridSize, adjustedGridSize)
+
+        ctx.strokeStyle = hexToRgba(gridColor, 0.4)
+        ctx.lineWidth = 0.5
+        ctx.beginPath()
+        ctx.moveTo(gridX, gridY + adjustedGridSize / 2)
+        ctx.lineTo(gridX + adjustedGridSize, gridY + adjustedGridSize / 2)
+        ctx.stroke()
+
+        ctx.beginPath()
+        ctx.moveTo(gridX + adjustedGridSize / 2, gridY)
+        ctx.lineTo(gridX + adjustedGridSize / 2, gridY + adjustedGridSize)
+        ctx.stroke()
+
+        if (row === 0 && character) {
+          const charFontSize = Math.floor(adjustedGridSize * 0.7)
+          ctx.font = `${charFontSize}px sans-serif`
+          ctx.textAlign = 'center'
+          ctx.textBaseline = 'middle'
+          ctx.fillStyle = fontColor
+          ctx.fillText(character, gridX + adjustedGridSize / 2, gridY + adjustedGridSize / 2)
+        }
+      }
+    }
+  }, [])
+
   const invalidChars = useMemo(() => {
     return (inputText || '')
       .split('')
@@ -427,16 +531,20 @@ function CopybookEditor({ config, onConfigChange }) {
   }, [])
 
   const totalPages = useMemo(() => {
+    if (sceneType === SceneType.CHARACTER) {
+      return Math.max(1, validChars.length)
+    }
+    
     const currentPageSize = PageSize[pageSize] || PageSize.A4
     const usableHeightMm = currentPageSize.height - PRINT_CONFIG.MARGIN_TOP_MM - PRINT_CONFIG.MARGIN_BOTTOM_MM
     const cellSizeMm = gridSizeCm * 10
     const maxRows = Math.max(1, Math.floor(usableHeightMm / cellSizeMm))
     
     return calculatePageInfo(0, validChars, maxRows, linesPerChar).totalPages
-  }, [validChars, pageSize, gridSizeCm, linesPerChar, calculatePageInfo])
+  }, [validChars, pageSize, gridSizeCm, linesPerChar, calculatePageInfo, sceneType])
 
   useEffect(() => {
-    if (!showPinyin || validChars.length === 0) {
+    if ((!showPinyin && sceneType !== SceneType.CHARACTER) || validChars.length === 0) {
       setPinyinData({})
       return
     }
@@ -457,7 +565,7 @@ function CopybookEditor({ config, onConfigChange }) {
     }
 
     fetchPinyin()
-  }, [validChars, showPinyin])
+  }, [validChars, showPinyin, sceneType])
 
   const generatePreview = useCallback(() => {
     const canvas = canvasRef.current
@@ -541,61 +649,104 @@ function CopybookEditor({ config, onConfigChange }) {
 
     ctx.fillText(infoText, headerX, headerY)
 
-    if (validChars.length === 0) {
-      for (let row = 0; row < maxRows; row++) {
-        for (let col = 0; col < cols; col++) {
-          const x = offsetX + previewMarginLeft + previewGridPadding + col * previewCellSize
-          const y = offsetY + mmToPx(marginTopMm + row * cellSizeMm)
-          drawGrid(ctx, x, y, previewCellSize, gridType, gridColor)
+    if (sceneType === SceneType.CHARACTER) {
+      if (validChars.length === 0) {
+        const previewAreaX = offsetX + previewMarginLeft
+        const previewAreaY = offsetY + mmToPx(marginTopMm)
+        const previewAreaWidth = mmToPx(usableWidthMm)
+        const previewAreaHeight = mmToPx(usableHeightMm)
+
+        ctx.strokeStyle = hexToRgba(gridColor, 0.3)
+        ctx.lineWidth = 1
+        ctx.setLineDash([5, 5])
+        ctx.strokeRect(previewAreaX, previewAreaY, previewAreaWidth, previewAreaHeight)
+        ctx.setLineDash([])
+
+        ctx.font = `${Math.max(14, mmToPx(5))}px sans-serif`
+        ctx.textAlign = 'center'
+        ctx.textBaseline = 'middle'
+        ctx.fillStyle = '#999'
+        ctx.fillText('请输入要练习的生字', previewAreaX + previewAreaWidth / 2, previewAreaY + previewAreaHeight / 2)
+      } else {
+        const charIndex = Math.min(currentPage, validChars.length - 1)
+        const currentChar = validChars[charIndex]
+        const charPinyin = pinyinData[currentChar] || ''
+
+        const previewAreaX = offsetX + previewMarginLeft
+        const previewAreaY = offsetY + mmToPx(marginTopMm)
+        const previewAreaWidth = mmToPx(usableWidthMm)
+        const previewAreaHeight = mmToPx(usableHeightMm)
+
+        drawCharacterScene(
+          ctx,
+          previewAreaX,
+          previewAreaY,
+          previewAreaWidth,
+          previewAreaHeight,
+          currentChar,
+          charPinyin,
+          gridColor,
+          fontColor,
+          pinyinColor
+        )
+      }
+    } else {
+      if (validChars.length === 0) {
+        for (let row = 0; row < maxRows; row++) {
+          for (let col = 0; col < cols; col++) {
+            const x = offsetX + previewMarginLeft + previewGridPadding + col * previewCellSize
+            const y = offsetY + mmToPx(marginTopMm + row * cellSizeMm)
+            drawGrid(ctx, x, y, previewCellSize, gridType, gridColor)
+          }
+        }
+        ctx.restore()
+        return
+      }
+
+      const pageInfo = calculatePageInfo(currentPage, validChars, maxRows, linesPerChar)
+      let charIndex = pageInfo.charIndex
+      let linesOffset = pageInfo.linesOffset
+      let rowIndex = 0
+
+      while (charIndex < validChars.length && rowIndex < maxRows) {
+        const currentChar = validChars[charIndex]
+        const charPinyin = pinyinData[currentChar] || ''
+
+        const linesRemainingForChar = linesPerChar - linesOffset
+        const linesToRenderThisPage = Math.min(linesRemainingForChar, maxRows - rowIndex)
+
+        for (let lineRepeat = 0; lineRepeat < linesToRenderThisPage; lineRepeat++) {
+          for (let col = 0; col < cols; col++) {
+            const x = offsetX + previewMarginLeft + previewGridPadding + col * previewCellSize
+            const y = offsetY + mmToPx(marginTopMm + rowIndex * cellSizeMm)
+
+            const isTemplate = col === 0
+            const charToDraw = isTemplate ? currentChar : ''
+
+            drawGrid(ctx, x, y, previewCellSize, gridType, gridColor, charToDraw, isTemplate, charPinyin, showPinyin, fontColor, pinyinColor)
+          }
+          rowIndex++
+          linesOffset++
+        }
+
+        if (linesOffset >= linesPerChar) {
+          charIndex++
+          linesOffset = 0
         }
       }
-      ctx.restore()
-      return
-    }
 
-    const pageInfo = calculatePageInfo(currentPage, validChars, maxRows, linesPerChar)
-    let charIndex = pageInfo.charIndex
-    let linesOffset = pageInfo.linesOffset
-    let rowIndex = 0
-
-    while (charIndex < validChars.length && rowIndex < maxRows) {
-      const currentChar = validChars[charIndex]
-      const charPinyin = pinyinData[currentChar] || ''
-
-      const linesRemainingForChar = linesPerChar - linesOffset
-      const linesToRenderThisPage = Math.min(linesRemainingForChar, maxRows - rowIndex)
-
-      for (let lineRepeat = 0; lineRepeat < linesToRenderThisPage; lineRepeat++) {
+      while (rowIndex < maxRows) {
         for (let col = 0; col < cols; col++) {
           const x = offsetX + previewMarginLeft + previewGridPadding + col * previewCellSize
           const y = offsetY + mmToPx(marginTopMm + rowIndex * cellSizeMm)
-
-          const isTemplate = col === 0
-          const charToDraw = isTemplate ? currentChar : ''
-
-          drawGrid(ctx, x, y, previewCellSize, gridType, gridColor, charToDraw, isTemplate, charPinyin, showPinyin, fontColor, pinyinColor)
+          drawGrid(ctx, x, y, previewCellSize, gridType, gridColor)
         }
         rowIndex++
-        linesOffset++
       }
-
-      if (linesOffset >= linesPerChar) {
-        charIndex++
-        linesOffset = 0
-      }
-    }
-
-    while (rowIndex < maxRows) {
-      for (let col = 0; col < cols; col++) {
-        const x = offsetX + previewMarginLeft + previewGridPadding + col * previewCellSize
-        const y = offsetY + mmToPx(marginTopMm + rowIndex * cellSizeMm)
-        drawGrid(ctx, x, y, previewCellSize, gridType, gridColor)
-      }
-      rowIndex++
     }
 
     ctx.restore()
-  }, [validChars, gridType, gridColor, drawGrid, pageSize, studentName, studentId, className, gridSizeCm, linesPerChar, currentPage, pinyinData, showPinyin, fontColor, pinyinColor, calculatePageInfo])
+  }, [validChars, gridType, gridColor, drawGrid, drawCharacterScene, pageSize, studentName, studentId, className, gridSizeCm, linesPerChar, currentPage, pinyinData, showPinyin, fontColor, pinyinColor, calculatePageInfo, sceneType])
 
   useEffect(() => {
     if (currentPage >= totalPages && totalPages > 0) {
@@ -642,6 +793,7 @@ function CopybookEditor({ config, onConfigChange }) {
       const templateData = {
         template_name: newTemplateName.trim(),
         config_data: {
+          scene_type: sceneType,
           grid_type: gridType,
           grid_color: gridColor,
           grid_size_cm: gridSizeCm,
@@ -687,6 +839,7 @@ function CopybookEditor({ config, onConfigChange }) {
     try {
       const exportData = {
         characters: validChars,
+        scene_type: sceneType,
         grid_type: gridType,
         grid_color: gridColor,
         grid_size_cm: gridSizeCm,
@@ -750,6 +903,23 @@ function CopybookEditor({ config, onConfigChange }) {
         </div>
 
         <div className="section">
+          <h3 className="section-title">场景选择</h3>
+          <div className="form-group">
+            <select
+              className="form-select"
+              value={sceneType}
+              onChange={(e) => setSceneType(e.target.value)}
+            >
+              {Object.entries(SceneTypeLabels).map(([key, label]) => (
+                <option key={key} value={key}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div className="section">
           <h3 className="section-title">输入文字</h3>
           <textarea
             className="text-input"
@@ -807,179 +977,183 @@ function CopybookEditor({ config, onConfigChange }) {
           </div>
         </div>
 
-        <div className="section">
-          <h3 className="section-title">格子类型</h3>
-          <div className="form-group">
-            <select
-              className="form-select"
-              value={gridType}
-              onChange={(e) => setGridType(e.target.value)}
-            >
-              {gridTypes.map((type) => (
-                <option key={type.value} value={type.value}>
-                  {type.label}
-                </option>
-              ))}
-            </select>
-          </div>
+        {sceneType === SceneType.NORMAL && (
+          <>
+            <div className="section">
+              <h3 className="section-title">格子类型</h3>
+              <div className="form-group">
+                <select
+                  className="form-select"
+                  value={gridType}
+                  onChange={(e) => setGridType(e.target.value)}
+                >
+                  {gridTypes.map((type) => (
+                    <option key={type.value} value={type.value}>
+                      {type.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-          <h3 className="section-title" style={{ marginTop: '16px' }}>格子大小</h3>
-          <div className="form-group">
-            <select
-              className="form-select"
-              value={gridSizeCm}
-              onChange={(e) => setGridSizeCm(parseFloat(e.target.value))}
-            >
-              {GridSizeOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </div>
+              <h3 className="section-title" style={{ marginTop: '16px' }}>格子大小</h3>
+              <div className="form-group">
+                <select
+                  className="form-select"
+                  value={gridSizeCm}
+                  onChange={(e) => setGridSizeCm(parseFloat(e.target.value))}
+                >
+                  {GridSizeOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-          <h3 className="section-title" style={{ marginTop: '16px' }}>每个字的行数</h3>
-          <div className="form-group">
-            <input
-              type="number"
-              className="form-input"
-              value={linesPerChar}
-              onChange={(e) => {
-                const val = parseInt(e.target.value, 10)
-                if (!isNaN(val) && val >= 1 && val <= 50) {
-                  setLinesPerChar(val)
-                } else if (e.target.value === '') {
-                  setLinesPerChar(1)
-                }
-              }}
-              min={1}
-              max={50}
-              placeholder="请输入行数（1-50）"
-            />
-            <p className="input-hint" style={{ marginTop: '4px', fontSize: '12px' }}>
-              每个字在字帖中重复显示的行数（1-50行）
-            </p>
-          </div>
-
-          <h3 className="section-title" style={{ marginTop: '16px' }}>拼音显示</h3>
-          <div className="form-group">
-            <label className="checkbox-label">
-              <input
-                type="checkbox"
-                checked={showPinyin}
-                onChange={(e) => setShowPinyin(e.target.checked)}
-                className="checkbox-input"
-              />
-              <span className="checkbox-text">显示拼音（开启后在字帖预览中显示）</span>
-            </label>
-          </div>
-
-          {showPinyin && (
-            <div className="form-group">
-              <h3 className="section-title" style={{ marginTop: '12px', marginBottom: '8px' }}>拼音颜色</h3>
-              <div className="color-input-row">
+              <h3 className="section-title" style={{ marginTop: '16px' }}>每个字的行数</h3>
+              <div className="form-group">
                 <input
-                  type="color"
-                  className="color-picker-input"
-                  value={pinyinColor}
-                  onChange={(e) => setPinyinColor(e.target.value)}
-                />
-                <input
-                  type="text"
-                  className="form-input color-hex-input"
-                  value={pinyinColor}
+                  type="number"
+                  className="form-input"
+                  value={linesPerChar}
                   onChange={(e) => {
-                    const val = e.target.value
-                    if (/^#[0-9A-Fa-f]{0,6}$/.test(val)) {
-                      setPinyinColor(val.length === 7 ? val : pinyinColor)
+                    const val = parseInt(e.target.value, 10)
+                    if (!isNaN(val) && val >= 1 && val <= 50) {
+                      setLinesPerChar(val)
+                    } else if (e.target.value === '') {
+                      setLinesPerChar(1)
                     }
                   }}
-                  onBlur={(e) => {
-                    const val = e.target.value
-                    if (/^#[0-9A-Fa-f]{6}$/.test(val)) {
-                      setPinyinColor(val)
-                    }
-                  }}
+                  min={1}
+                  max={50}
+                  placeholder="请输入行数（1-50）"
                 />
+                <p className="input-hint" style={{ marginTop: '4px', fontSize: '12px' }}>
+                  每个字在字帖中重复显示的行数（1-50行）
+                </p>
+              </div>
+
+              <h3 className="section-title" style={{ marginTop: '16px' }}>拼音显示</h3>
+              <div className="form-group">
+                <label className="checkbox-label">
+                  <input
+                    type="checkbox"
+                    checked={showPinyin}
+                    onChange={(e) => setShowPinyin(e.target.checked)}
+                    className="checkbox-input"
+                  />
+                  <span className="checkbox-text">显示拼音（开启后在字帖预览中显示）</span>
+                </label>
+              </div>
+
+              {showPinyin && (
+                <div className="form-group">
+                  <h3 className="section-title" style={{ marginTop: '12px', marginBottom: '8px' }}>拼音颜色</h3>
+                  <div className="color-input-row">
+                    <input
+                      type="color"
+                      className="color-picker-input"
+                      value={pinyinColor}
+                      onChange={(e) => setPinyinColor(e.target.value)}
+                    />
+                    <input
+                      type="text"
+                      className="form-input color-hex-input"
+                      value={pinyinColor}
+                      onChange={(e) => {
+                        const val = e.target.value
+                        if (/^#[0-9A-Fa-f]{0,6}$/.test(val)) {
+                          setPinyinColor(val.length === 7 ? val : pinyinColor)
+                        }
+                      }}
+                      onBlur={(e) => {
+                        const val = e.target.value
+                        if (/^#[0-9A-Fa-f]{6}$/.test(val)) {
+                          setPinyinColor(val)
+                        }
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              <h3 className="section-title" style={{ marginTop: '16px' }}>格子颜色</h3>
+              <div className="form-group">
+                <div className="color-input-row">
+                  <input
+                    type="color"
+                    className="color-picker-input"
+                    value={gridColor}
+                    onChange={(e) => setGridColor(e.target.value)}
+                  />
+                  <input
+                    type="text"
+                    className="form-input color-hex-input"
+                    value={gridColor}
+                    onChange={(e) => {
+                      const val = e.target.value
+                      if (/^#[0-9A-Fa-f]{0,6}$/.test(val)) {
+                        setGridColor(val.length === 7 ? val : gridColor)
+                      }
+                    }}
+                    onBlur={(e) => {
+                      const val = e.target.value
+                      if (/^#[0-9A-Fa-f]{6}$/.test(val)) {
+                        setGridColor(val)
+                      }
+                    }}
+                  />
+                </div>
               </div>
             </div>
-          )}
 
-          <h3 className="section-title" style={{ marginTop: '16px' }}>格子颜色</h3>
-          <div className="form-group">
-            <div className="color-input-row">
-              <input
-                type="color"
-                className="color-picker-input"
-                value={gridColor}
-                onChange={(e) => setGridColor(e.target.value)}
-              />
-              <input
-                type="text"
-                className="form-input color-hex-input"
-                value={gridColor}
-                onChange={(e) => {
-                  const val = e.target.value
-                  if (/^#[0-9A-Fa-f]{0,6}$/.test(val)) {
-                    setGridColor(val.length === 7 ? val : gridColor)
-                  }
-                }}
-                onBlur={(e) => {
-                  const val = e.target.value
-                  if (/^#[0-9A-Fa-f]{6}$/.test(val)) {
-                    setGridColor(val)
-                  }
-                }}
-              />
+            <div className="section">
+              <h3 className="section-title">字体样式</h3>
+              <div className="form-group">
+                <select
+                  className="form-select"
+                  value={fontStyle}
+                  onChange={(e) => setFontStyle(e.target.value)}
+                >
+                  {fontStyles.map((style) => (
+                    <option key={style.value} value={style.value}>
+                      {style.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <h3 className="section-title" style={{ marginTop: '16px' }}>字体颜色</h3>
+              <div className="form-group">
+                <div className="color-input-row">
+                  <input
+                    type="color"
+                    className="color-picker-input"
+                    value={fontColor}
+                    onChange={(e) => setFontColor(e.target.value)}
+                  />
+                  <input
+                    type="text"
+                    className="form-input color-hex-input"
+                    value={fontColor}
+                    onChange={(e) => {
+                      const val = e.target.value
+                      if (/^#[0-9A-Fa-f]{0,6}$/.test(val)) {
+                        setFontColor(val.length === 7 ? val : fontColor)
+                      }
+                    }}
+                    onBlur={(e) => {
+                      const val = e.target.value
+                      if (/^#[0-9A-Fa-f]{6}$/.test(val)) {
+                        setFontColor(val)
+                      }
+                    }}
+                  />
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
-
-        <div className="section">
-          <h3 className="section-title">字体样式</h3>
-          <div className="form-group">
-            <select
-              className="form-select"
-              value={fontStyle}
-              onChange={(e) => setFontStyle(e.target.value)}
-            >
-              {fontStyles.map((style) => (
-                <option key={style.value} value={style.value}>
-                  {style.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <h3 className="section-title" style={{ marginTop: '16px' }}>字体颜色</h3>
-          <div className="form-group">
-            <div className="color-input-row">
-              <input
-                type="color"
-                className="color-picker-input"
-                value={fontColor}
-                onChange={(e) => setFontColor(e.target.value)}
-              />
-              <input
-                type="text"
-                className="form-input color-hex-input"
-                value={fontColor}
-                onChange={(e) => {
-                  const val = e.target.value
-                  if (/^#[0-9A-Fa-f]{0,6}$/.test(val)) {
-                    setFontColor(val.length === 7 ? val : fontColor)
-                  }
-                }}
-                onBlur={(e) => {
-                  const val = e.target.value
-                  if (/^#[0-9A-Fa-f]{6}$/.test(val)) {
-                    setFontColor(val)
-                  }
-                }}
-              />
-            </div>
-          </div>
-        </div>
+          </>
+        )}
 
         <div className="section">
           <h3 className="section-title">页面大小</h3>
