@@ -467,6 +467,100 @@ function TemplateManager({ onApplyTemplate }) {
                             </span>
                           </div>
                         )}
+                        {configData.scene_type === SceneType.CHARACTER && (
+                          <>
+                            <div className="config-item">
+                              <span className="config-label">拼音显示:</span>
+                              <span className="config-value">
+                                {configData.show_character_pinyin !== false ? '开启' : '关闭'}
+                              </span>
+                            </div>
+                            {configData.show_character_pinyin !== false && (
+                              <div className="config-item">
+                                <span className="config-label">拼音颜色:</span>
+                                <span className="config-value">
+                                  <span
+                                    className="color-swatch-small"
+                                    style={{
+                                      display: 'inline-block',
+                                      width: '16px',
+                                      height: '16px',
+                                      borderRadius: '3px',
+                                      backgroundColor: configData.pinyin_color || '#000000',
+                                      marginRight: '6px',
+                                      verticalAlign: 'middle',
+                                      border: '1px solid #ddd',
+                                    }}
+                                  />
+                                  {configData.pinyin_color || '#000000'}
+                                </span>
+                              </div>
+                            )}
+                            <div className="config-item">
+                              <span className="config-label">生字颜色:</span>
+                              <span className="config-value">
+                                <span
+                                  className="color-swatch-small"
+                                  style={{
+                                    display: 'inline-block',
+                                    width: '16px',
+                                    height: '16px',
+                                    borderRadius: '3px',
+                                    backgroundColor: configData.character_color || '#000000',
+                                    marginRight: '6px',
+                                    verticalAlign: 'middle',
+                                    border: '1px solid #ddd',
+                                  }}
+                                />
+                                {configData.character_color || '#000000'}
+                              </span>
+                            </div>
+                            <div className="config-item">
+                              <span className="config-label">右侧格子类型:</span>
+                              <span className="config-value">
+                                {configData.right_grid_type || '米字格'}
+                              </span>
+                            </div>
+                            <div className="config-item">
+                              <span className="config-label">右侧格子颜色:</span>
+                              <span className="config-value">
+                                <span
+                                  className="color-swatch-small"
+                                  style={{
+                                    display: 'inline-block',
+                                    width: '16px',
+                                    height: '16px',
+                                    borderRadius: '3px',
+                                    backgroundColor: configData.right_grid_color || '#000000',
+                                    marginRight: '6px',
+                                    verticalAlign: 'middle',
+                                    border: '1px solid #ddd',
+                                  }}
+                                />
+                                {configData.right_grid_color || '#000000'}
+                              </span>
+                            </div>
+                            <div className="config-item">
+                              <span className="config-label">左侧生字框颜色:</span>
+                              <span className="config-value">
+                                <span
+                                  className="color-swatch-small"
+                                  style={{
+                                    display: 'inline-block',
+                                    width: '16px',
+                                    height: '16px',
+                                    borderRadius: '3px',
+                                    backgroundColor: configData.grid_color || '#000000',
+                                    marginRight: '6px',
+                                    verticalAlign: 'middle',
+                                    border: '1px solid #ddd',
+                                  }}
+                                />
+                                {configData.grid_color || '#000000'}
+                              </span>
+                            </div>
+                          </>
+                        )}
                         {configData.scene_type !== SceneType.CHARACTER && (
                           <>
                             <div className="config-item">
