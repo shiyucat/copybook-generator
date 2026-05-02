@@ -919,17 +919,9 @@ def re_export_from_history(history_id):
             os.unlink(output_path)
             
             try:
-                new_history = ExportHistory(
-                    scene_type=scene_type,
-                    student_name=student_name,
-                    student_id=student_id,
-                    input_text=history.input_text,
-                    page_size=page_size_key,
-                    config_data=config_data
-                )
-                db.save_export_history(new_history)
+                db.increment_export_count(history_id)
             except Exception as update_err:
-                print(f"更新导出历史失败: {update_err}")
+                print(f"更新导出次数失败: {update_err}")
             
             first_char = characters[0] if characters else ''
             filename = f"{first_char}_字帖.pdf" if first_char else "字帖.pdf"

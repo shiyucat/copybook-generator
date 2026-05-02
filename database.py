@@ -470,9 +470,8 @@ class TemplateDatabase:
     
     def save_export_history(self, history: ExportHistory) -> int:
         """
-        保存导出历史
-        如果相同配置已存在（场景类型、姓名、学号、文字内容、页面大小相同），则更新导出次数
-        否则创建新记录
+        保存导出历史（编辑页面导出时使用）
+        每次导出都创建一条新记录，不合并相同配置
         
         Args:
             history: 导出历史对象
@@ -484,34 +483,6 @@ class TemplateDatabase:
         cursor = conn.cursor()
         
         now = datetime.now().isoformat()
-        
-        cursor.execute("""
-            SELECT id, export_count FROM export_history 
-            WHERE scene_type = ? AND student_name = ? AND student_id = ? AND input_text = ? AND page_size = ?
-        """, (
-            history.scene_type,
-            history.student_name,
-            history.student_id,
-            history.input_text,
-            history.page_size
-        ))
-        
-        existing = cursor.fetchone()
-        
-        if existing:
-            history_id = existing['id']
-            new_count = existing['export_count'] + 1
-            
-            cursor.execute("""
-                UPDATE export_history 
-                SET export_count = ?, updated_at = ?
-                WHERE id = ?
-            """, (new_count, now, history_id))
-            
-            conn.commit()
-            conn.close()
-            
-            return history_id
         
         cursor.execute("""
             INSERT INTO export_history (
@@ -537,6 +508,35 @@ class TemplateDatabase:
         conn.close()
         
         return history_id
+    
+    def increment_export_count(self, history_id: int) -> bool:
+        """
+        增加导出次数（导出历史页面重新导出时使用）
+        更新指定记录的导出次数和更新时间
+        
+        Args:
+            history_id: 历史记录ID
+            
+        Returns:
+            是否成功更新
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        
+        now = datetime.now().isoformat()
+        
+        cursor.execute("""
+            UPDATE export_history 
+            SET export_count = export_count + 1, updated_at = ?
+            WHERE id = ?
+        """, (now, history_id))
+        
+        affected = cursor.rowcount
+        
+        conn.commit()
+        conn.close()
+        
+        return affected > 0
     
     def get_export_history_by_id(self, history_id: int) -> Optional[ExportHistory]:
         """
