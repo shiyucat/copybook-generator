@@ -347,7 +347,10 @@ function CopybookEditor({ config, onConfigChange }) {
 
   const drawCharacterScene = useCallback((ctx, x, y, totalWidth, totalHeight, character, pinyin, gridColor, fontColor, pinyinColor) => {
     const outerMargin = totalWidth * 0.05
-    const innerBoxSize = Math.min(totalWidth * 0.4, totalHeight * 0.9)
+    const leftBoxRatio = 0.45
+    const leftBoxWidth = totalWidth * leftBoxRatio
+    const innerBoxSize = Math.min(leftBoxWidth - 2 * outerMargin, totalHeight * 0.9)
+    
     const leftBoxX = x + outerMargin
     const leftBoxY = y + (totalHeight - innerBoxSize) / 2
 
@@ -395,17 +398,20 @@ function CopybookEditor({ config, onConfigChange }) {
       ctx.fillText(pinyin, leftBoxX + innerBoxSize / 2, pinyinY)
     }
 
-    const rightStartX = leftBoxX + innerBoxSize + outerMargin
-    const rightGridSize = (totalWidth - rightStartX - x - outerMargin) / 2
+    const rightAreaX = x + leftBoxWidth
+    const rightAreaWidth = totalWidth - leftBoxWidth
+    const rightGridCount = 2
+    const rightGridGap = rightAreaWidth * 0.05
+    const rightGridSize = (rightAreaWidth - outerMargin - (rightGridCount - 1) * rightGridGap) / rightGridCount
     const adjustedGridSize = Math.min(rightGridSize, totalHeight / 2.5)
 
-    const rightGridY1 = y + (totalHeight - 2 * adjustedGridSize) / 3
-    const rightGridY2 = rightGridY1 + adjustedGridSize + (totalHeight - 2 * adjustedGridSize) / 3
+    const totalRightHeight = 2 * adjustedGridSize + adjustedGridSize * 0.3
+    const rightStartY = y + (totalHeight - totalRightHeight) / 2
 
     for (let row = 0; row < 2; row++) {
-      const gridY = row === 0 ? rightGridY1 : rightGridY2
+      const gridY = rightStartY + row * (adjustedGridSize + adjustedGridSize * 0.15)
       for (let col = 0; col < 2; col++) {
-        const gridX = rightStartX + col * adjustedGridSize
+        const gridX = rightAreaX + outerMargin + col * (adjustedGridSize + rightGridGap)
 
         ctx.strokeStyle = hexToRgba(gridColor, 0.7)
         ctx.lineWidth = 1
