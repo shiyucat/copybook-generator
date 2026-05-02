@@ -517,6 +517,10 @@ def export_pdf():
             right_grid_color_hex = '#000000'
         right_grid_color = hex_to_rgb(right_grid_color_hex)
         
+        right_grid_type = data.get('right_grid_type', '米字格')
+        if right_grid_type not in ['田字格', '米字格', '回宫格', '方格']:
+            right_grid_type = '米字格'
+        
         import tempfile
         with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as tmp:
             output_path = tmp.name
@@ -531,6 +535,7 @@ def export_pdf():
                 pinyin_color=pinyin_color,
                 character_color=character_color,
                 right_grid_color=right_grid_color,
+                right_grid_type=right_grid_type,
                 grid_size_cm=grid_size_cm,
                 lines_per_char=lines_per_char,
                 show_pinyin=show_pinyin,

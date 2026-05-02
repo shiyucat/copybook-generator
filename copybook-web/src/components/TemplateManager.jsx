@@ -31,6 +31,10 @@ const GridSizeOptions = [
 const DEFAULT_GRID_COLOR = '#000000'
 const DEFAULT_FONT_COLOR = '#000000'
 const DEFAULT_PINYIN_COLOR = '#000000'
+const DEFAULT_CHARACTER_COLOR = '#000000'
+const DEFAULT_RIGHT_GRID_COLOR = '#000000'
+const DEFAULT_SHOW_CHARACTER_PINYIN = true
+const DEFAULT_RIGHT_GRID_TYPE = '米字格'
 
 const SceneType = {
   NORMAL: 'normal',
@@ -74,6 +78,10 @@ function TemplateManager({ onApplyTemplate }) {
     student_id: '',
     class_name: '',
     page_size: 'A4',
+    show_character_pinyin: DEFAULT_SHOW_CHARACTER_PINYIN,
+    character_color: DEFAULT_CHARACTER_COLOR,
+    right_grid_color: DEFAULT_RIGHT_GRID_COLOR,
+    right_grid_type: DEFAULT_RIGHT_GRID_TYPE,
   })
   const [savingEdit, setSavingEdit] = useState(false)
 
@@ -152,6 +160,16 @@ function TemplateManager({ onApplyTemplate }) {
       student_id: String(configData.student_id ?? ''),
       class_name: String(configData.class_name ?? ''),
       page_size: configData.page_size ?? 'A4',
+      show_character_pinyin: configData.show_character_pinyin !== undefined 
+        ? configData.show_character_pinyin 
+        : DEFAULT_SHOW_CHARACTER_PINYIN,
+      character_color: /^#[0-9A-Fa-f]{6}$/.test(configData.character_color) 
+        ? configData.character_color 
+        : DEFAULT_CHARACTER_COLOR,
+      right_grid_color: /^#[0-9A-Fa-f]{6}$/.test(configData.right_grid_color) 
+        ? configData.right_grid_color 
+        : DEFAULT_RIGHT_GRID_COLOR,
+      right_grid_type: configData.right_grid_type ?? DEFAULT_RIGHT_GRID_TYPE,
     })
     setShowEditDialog(true)
   }
@@ -181,6 +199,10 @@ function TemplateManager({ onApplyTemplate }) {
           student_id: editForm.student_id,
           class_name: editForm.class_name,
           page_size: editForm.page_size,
+          show_character_pinyin: editForm.show_character_pinyin,
+          character_color: editForm.character_color,
+          right_grid_color: editForm.right_grid_color,
+          right_grid_type: editForm.right_grid_type,
         },
       }
 
@@ -591,7 +613,8 @@ function TemplateManager({ onApplyTemplate }) {
                 <select
                   className="form-select"
                   value={editForm.scene_type}
-                  onChange={(e) => handleEditFormChange('scene_type', e.target.value)}
+                  disabled
+                  style={{ backgroundColor: '#f5f5f5', cursor: 'not-allowed' }}
                 >
                   {Object.entries(SceneTypeLabels).map(([key, label]) => (
                     <option key={key} value={key}>
@@ -600,6 +623,154 @@ function TemplateManager({ onApplyTemplate }) {
                   ))}
                 </select>
               </div>
+
+              {editForm.scene_type === SceneType.CHARACTER && (
+                <>
+                  <div className="form-group">
+                    <label className="checkbox-label">
+                      <input
+                        type="checkbox"
+                        checked={editForm.show_character_pinyin}
+                        onChange={(e) => handleEditFormChange('show_character_pinyin', e.target.checked)}
+                        className="checkbox-input"
+                      />
+                      <span className="checkbox-text">显示拼音（开启后在生字框上方显示）</span>
+                    </label>
+                  </div>
+
+                  {editForm.show_character_pinyin && (
+                    <div className="form-group">
+                      <label className="form-label">拼音颜色</label>
+                      <div className="color-input-row">
+                        <input
+                          type="color"
+                          className="color-picker-input"
+                          value={editForm.pinyin_color}
+                          onChange={(e) => handleEditFormChange('pinyin_color', e.target.value)}
+                        />
+                        <input
+                          type="text"
+                          className="form-input color-hex-input"
+                          value={editForm.pinyin_color}
+                          onChange={(e) => {
+                            const val = e.target.value
+                            if (/^#[0-9A-Fa-f]{0,6}$/.test(val)) {
+                              handleEditFormChange('pinyin_color', val.length === 7 ? val : editForm.pinyin_color)
+                            }
+                          }}
+                          onBlur={(e) => {
+                            const val = e.target.value
+                            if (/^#[0-9A-Fa-f]{6}$/.test(val)) {
+                              handleEditFormChange('pinyin_color', val)
+                            }
+                          }}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="form-group">
+                    <label className="form-label">生字颜色</label>
+                    <div className="color-input-row">
+                      <input
+                        type="color"
+                        className="color-picker-input"
+                        value={editForm.character_color}
+                        onChange={(e) => handleEditFormChange('character_color', e.target.value)}
+                      />
+                      <input
+                        type="text"
+                        className="form-input color-hex-input"
+                        value={editForm.character_color}
+                        onChange={(e) => {
+                          const val = e.target.value
+                          if (/^#[0-9A-Fa-f]{0,6}$/.test(val)) {
+                            handleEditFormChange('character_color', val.length === 7 ? val : editForm.character_color)
+                          }
+                        }}
+                        onBlur={(e) => {
+                          const val = e.target.value
+                          if (/^#[0-9A-Fa-f]{6}$/.test(val)) {
+                            handleEditFormChange('character_color', val)
+                          }
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">右侧格子类型</label>
+                    <select
+                      className="form-select"
+                      value={editForm.right_grid_type}
+                      onChange={(e) => handleEditFormChange('right_grid_type', e.target.value)}
+                    >
+                      <option value={GridType.TIANZI}>田字格</option>
+                      <option value={GridType.MIZI}>米字格</option>
+                      <option value={GridType.HUIGONG}>回宫格</option>
+                      <option value={GridType.FANGGE}>方格</option>
+                    </select>
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">右侧格子颜色</label>
+                    <div className="color-input-row">
+                      <input
+                        type="color"
+                        className="color-picker-input"
+                        value={editForm.right_grid_color}
+                        onChange={(e) => handleEditFormChange('right_grid_color', e.target.value)}
+                      />
+                      <input
+                        type="text"
+                        className="form-input color-hex-input"
+                        value={editForm.right_grid_color}
+                        onChange={(e) => {
+                          const val = e.target.value
+                          if (/^#[0-9A-Fa-f]{0,6}$/.test(val)) {
+                            handleEditFormChange('right_grid_color', val.length === 7 ? val : editForm.right_grid_color)
+                          }
+                        }}
+                        onBlur={(e) => {
+                          const val = e.target.value
+                          if (/^#[0-9A-Fa-f]{6}$/.test(val)) {
+                            handleEditFormChange('right_grid_color', val)
+                          }
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">左侧生字框颜色</label>
+                    <div className="color-input-row">
+                      <input
+                        type="color"
+                        className="color-picker-input"
+                        value={editForm.grid_color}
+                        onChange={(e) => handleEditFormChange('grid_color', e.target.value)}
+                      />
+                      <input
+                        type="text"
+                        className="form-input color-hex-input"
+                        value={editForm.grid_color}
+                        onChange={(e) => {
+                          const val = e.target.value
+                          if (/^#[0-9A-Fa-f]{0,6}$/.test(val)) {
+                            handleEditFormChange('grid_color', val.length === 7 ? val : editForm.grid_color)
+                          }
+                        }}
+                        onBlur={(e) => {
+                          const val = e.target.value
+                          if (/^#[0-9A-Fa-f]{6}$/.test(val)) {
+                            handleEditFormChange('grid_color', val)
+                          }
+                        }}
+                      />
+                    </div>
+                  </div>
+                </>
+              )}
 
               {editForm.scene_type !== SceneType.CHARACTER && (
                 <>

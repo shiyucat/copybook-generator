@@ -50,6 +50,7 @@ DEFAULT_FONT_COLOR = (0.0, 0.0, 0.0)
 DEFAULT_PINYIN_COLOR = (0.0, 0.0, 0.0)
 DEFAULT_CHARACTER_COLOR = (0.0, 0.0, 0.0)
 DEFAULT_RIGHT_GRID_COLOR = (0.0, 0.0, 0.0)
+DEFAULT_RIGHT_GRID_TYPE = "米字格"
 
 CHARACTER_SCENE_CONFIG = {
     "CHARACTER_BOX_SIZE_MM": 40,
@@ -1390,6 +1391,7 @@ class CopybookGenerator:
                  pinyin_color: Tuple[float, float, float] = DEFAULT_PINYIN_COLOR,
                  character_color: Tuple[float, float, float] = DEFAULT_CHARACTER_COLOR,
                  right_grid_color: Tuple[float, float, float] = DEFAULT_RIGHT_GRID_COLOR,
+                 right_grid_type: str = DEFAULT_RIGHT_GRID_TYPE,
                  grid_size_cm: float = DEFAULT_GRID_SIZE_CM,
                  lines_per_char: int = DEFAULT_LINES_PER_CHAR,
                  show_pinyin: bool = DEFAULT_SHOW_PINYIN,
@@ -1413,6 +1415,7 @@ class CopybookGenerator:
             pinyin_color: 拼音颜色（RGB元组，值为0.0-1.0），默认黑色
             character_color: 生字颜色（RGB元组，值为0.0-1.0），默认黑色
             right_grid_color: 右侧格子颜色（RGB元组，值为0.0-1.0），默认黑色
+            right_grid_type: 右侧格子类型，"田字格"、"米字格"、"回宫格"、"方格"，默认米字格
             grid_size_cm: 格子大小（厘米），默认2.0cm
             lines_per_char: 每个字的行数，默认1行
             show_pinyin: 是否显示拼音（普通场景），默认False
@@ -1433,6 +1436,7 @@ class CopybookGenerator:
         self.pinyin_color = pinyin_color
         self.character_color = character_color
         self.right_grid_color = right_grid_color
+        self.right_grid_type = right_grid_type
         self.grid_size_cm = grid_size_cm
         self.lines_per_char = max(1, min(50, lines_per_char))
         self.show_pinyin = show_pinyin
@@ -3059,9 +3063,9 @@ class CopybookGenerator:
             
             c.drawString(text_x, text_y, character)
     
-    def _draw_mizi_grid_small(self, c: canvas.Canvas, x: float, y: float):
+    def _draw_right_grid(self, c: canvas.Canvas, x: float, y: float):
         """
-        绘制小米字格（2cm，空白）
+        绘制右侧格子（根据类型绘制不同样式）
         
         Args:
             c: PDF画布对象
@@ -3077,10 +3081,17 @@ class CopybookGenerator:
         c.setStrokeColor(Color(self.right_grid_color[0], self.right_grid_color[1], self.right_grid_color[2]))
         c.setLineWidth(0.5)
         
-        c.line(x, y + size / 2, x + size, y + size / 2)
-        c.line(x + size / 2, y, x + size / 2, y + size)
-        c.line(x, y, x + size, y + size)
-        c.line(x + size, y, x, y + size)
+        if self.right_grid_type == GridType.TIANZI or self.right_grid_type == GridType.MIZI:
+            c.line(x, y + size / 2, x + size, y + size / 2)
+            c.line(x + size / 2, y, x + size / 2, y + size)
+        
+        if self.right_grid_type == GridType.MIZI:
+            c.line(x, y, x + size, y + size)
+            c.line(x + size, y, x, y + size)
+        
+        if self.right_grid_type == GridType.HUIGONG:
+            inner_margin = size / 5
+            c.rect(x + inner_margin, y + inner_margin, size - inner_margin * 2, size - inner_margin * 2)
     
     def _draw_character_row(self, c: canvas.Canvas, x: float, y: float, 
                             character: str = "", pinyin_text: str = "",
@@ -3111,7 +3122,7 @@ class CopybookGenerator:
             for col in range(right_cols):
                 grid_x = right_area_x + col * right_grid_size
                 grid_y = y + row * right_grid_size
-                self._draw_mizi_grid_small(c, grid_x, grid_y)
+                self._draw_right_grid(c, grid_x, grid_y)
     
     def _draw_page_character_scene(self, c: canvas.Canvas, characters: List[str],
                                     start_char_index: int, page_num: int) -> int:
