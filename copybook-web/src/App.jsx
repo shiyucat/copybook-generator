@@ -20,6 +20,10 @@ const DEFAULT_CONFIG = {
   student_id: '',
   class_name: '',
   page_size: 'A4',
+  show_character_pinyin: true,
+  character_color: '#000000',
+  right_grid_color: '#000000',
+  right_grid_type: '米字格',
 }
 
 function App() {
@@ -57,6 +61,12 @@ function App() {
       student_id: String(safeConfig.student_id ?? DEFAULT_CONFIG.student_id),
       class_name: String(safeConfig.class_name ?? DEFAULT_CONFIG.class_name),
       page_size: safeConfig.page_size ?? DEFAULT_CONFIG.page_size,
+      show_character_pinyin: safeConfig.show_character_pinyin !== undefined 
+        ? safeConfig.show_character_pinyin 
+        : DEFAULT_CONFIG.show_character_pinyin,
+      character_color: safeConfig.character_color ?? DEFAULT_CONFIG.character_color,
+      right_grid_color: safeConfig.right_grid_color ?? DEFAULT_CONFIG.right_grid_color,
+      right_grid_type: safeConfig.right_grid_type ?? DEFAULT_CONFIG.right_grid_type,
     }
     setCurrentConfig(mergedConfig)
     setSelectedTemplateId(template.template_id)
