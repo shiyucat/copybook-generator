@@ -537,7 +537,7 @@ class TemplateDatabase:
             # 开始事务，确保原子性操作
             conn.execute('BEGIN TRANSACTION')
             
-            # 检查是否存在相同记录（使用FOR UPDATE防止并发问题）
+            # 检查是否存在相同记录（SQLite不支持FOR UPDATE，使用事务+更新计数来确保原子性）
             cursor.execute("""
                 SELECT 
                     id as history_id,
@@ -557,7 +557,6 @@ class TemplateDatabase:
                   AND input_text = ? 
                   AND page_size = ?
                 LIMIT 1
-                FOR UPDATE
             """, (
                 history.scene_type,
                 history.student_name,
@@ -604,8 +603,14 @@ class TemplateDatabase:
                 return history_id
                 
         except Exception as e:
-            conn.rollback()
-            conn.close()
+            try:
+                conn.rollback()
+            except:
+                pass
+            try:
+                conn.close()
+            except:
+                pass
             raise e
     
     def increment_export_count(self, history_id: int) -> bool:
