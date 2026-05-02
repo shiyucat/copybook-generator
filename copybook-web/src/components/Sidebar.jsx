@@ -4,6 +4,7 @@ function Sidebar({ activePage, onPageChange }) {
   const menuItems = [
     { id: 'editor', label: '字帖编辑', icon: '✏️' },
     { id: 'templates', label: '模版管理', icon: '📁' },
+    { id: 'history', label: '导出历史', icon: '📜' },
   ]
 
   return (

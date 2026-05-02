@@ -52,6 +52,64 @@ class Template:
         )
 
 
+class ExportHistory:
+    """导出历史数据类"""
+    
+    def __init__(self, 
+                 history_id: int = None,
+                 scene_type: str = "normal",
+                 student_name: str = "",
+                 student_id: str = "",
+                 input_text: str = "",
+                 page_size: str = "A4",
+                 export_count: int = 1,
+                 created_at: str = None,
+                 updated_at: str = None,
+                 config_data: Dict[str, Any] = None):
+        self.history_id = history_id
+        self.scene_type = scene_type
+        self.student_name = student_name
+        self.student_id = student_id
+        self.input_text = input_text
+        self.page_size = page_size
+        self.export_count = export_count
+        self.created_at = created_at or datetime.now().isoformat()
+        self.updated_at = updated_at or self.created_at
+        self.config_data = config_data or {}
+    
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "history_id": self.history_id,
+            "scene_type": self.scene_type,
+            "student_name": self.student_name,
+            "student_id": self.student_id,
+            "input_text": self.input_text,
+            "page_size": self.page_size,
+            "export_count": self.export_count,
+            "created_at": self.created_at,
+            "updated_at": self.updated_at,
+            "config_data": self.config_data
+        }
+    
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "ExportHistory":
+        config_data = data.get("config_data")
+        if isinstance(config_data, str):
+            config_data = json.loads(config_data)
+        return cls(
+            history_id=data.get("history_id"),
+            scene_type=data.get("scene_type", "normal"),
+            student_name=data.get("student_name", ""),
+            student_id=data.get("student_id", ""),
+            input_text=data.get("input_text", ""),
+            page_size=data.get("page_size", "A4"),
+            export_count=data.get("export_count", 1),
+            created_at=data.get("created_at"),
+            updated_at=data.get("updated_at"),
+            config_data=config_data or {}
+        )
+
+
 class TemplateDatabase:
     """模版数据库管理类"""
     
@@ -115,6 +173,31 @@ class TemplateDatabase:
         cursor.execute("""
             CREATE INDEX IF NOT EXISTS idx_created_at 
             ON templates(created_at)
+        """)
+        
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS export_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                scene_type TEXT NOT NULL DEFAULT 'normal',
+                student_name TEXT NOT NULL DEFAULT '',
+                student_id TEXT NOT NULL DEFAULT '',
+                input_text TEXT NOT NULL DEFAULT '',
+                page_size TEXT NOT NULL DEFAULT 'A4',
+                export_count INTEGER NOT NULL DEFAULT 1,
+                config_data TEXT NOT NULL DEFAULT '{}',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+        """)
+        
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_export_history_created_at 
+            ON export_history(created_at)
+        """)
+        
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_export_history_updated_at 
+            ON export_history(updated_at)
         """)
         
         conn.commit()
@@ -379,6 +462,188 @@ class TemplateDatabase:
         cursor = conn.cursor()
         
         cursor.execute("SELECT COUNT(*) FROM templates")
+        count = cursor.fetchone()[0]
+        
+        conn.close()
+        
+        return count
+    
+    def save_export_history(self, history: ExportHistory) -> int:
+        """
+        保存导出历史
+        如果相同配置已存在（场景类型、姓名、学号、文字内容、页面大小相同），则更新导出次数
+        否则创建新记录
+        
+        Args:
+            history: 导出历史对象
+            
+        Returns:
+            历史记录ID
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        
+        now = datetime.now().isoformat()
+        
+        cursor.execute("""
+            SELECT id, export_count FROM export_history 
+            WHERE scene_type = ? AND student_name = ? AND student_id = ? AND input_text = ? AND page_size = ?
+        """, (
+            history.scene_type,
+            history.student_name,
+            history.student_id,
+            history.input_text,
+            history.page_size
+        ))
+        
+        existing = cursor.fetchone()
+        
+        if existing:
+            history_id = existing['id']
+            new_count = existing['export_count'] + 1
+            
+            cursor.execute("""
+                UPDATE export_history 
+                SET export_count = ?, updated_at = ?
+                WHERE id = ?
+            """, (new_count, now, history_id))
+            
+            conn.commit()
+            conn.close()
+            
+            return history_id
+        
+        cursor.execute("""
+            INSERT INTO export_history (
+                scene_type, student_name, student_id, input_text, 
+                page_size, export_count, config_data, created_at, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            history.scene_type,
+            history.student_name,
+            history.student_id,
+            history.input_text,
+            history.page_size,
+            1,
+            json.dumps(history.config_data, ensure_ascii=False),
+            now,
+            now
+        ))
+        
+        history_id = cursor.lastrowid
+        
+        conn.commit()
+        conn.close()
+        
+        return history_id
+    
+    def get_export_history_by_id(self, history_id: int) -> Optional[ExportHistory]:
+        """
+        根据ID获取导出历史
+        
+        Args:
+            history_id: 历史记录ID
+            
+        Returns:
+            导出历史对象，如果不存在返回 None
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT 
+                id as history_id,
+                scene_type,
+                student_name,
+                student_id,
+                input_text,
+                page_size,
+                export_count,
+                config_data,
+                created_at,
+                updated_at
+            FROM export_history 
+            WHERE id = ?
+        """, (history_id,))
+        
+        row = cursor.fetchone()
+        conn.close()
+        
+        if row:
+            return ExportHistory.from_dict(dict(row))
+        return None
+    
+    def get_export_history_paginated(self, page: int = 1, page_size: int = 10) -> Dict[str, Any]:
+        """
+        分页获取导出历史
+        
+        Args:
+            page: 页码，从1开始
+            page_size: 每页数量
+            
+        Returns:
+            包含分页信息的字典：{
+                "history": [ExportHistory...],
+                "total": 总数,
+                "page": 当前页码,
+                "page_size": 每页数量,
+                "total_pages": 总页数
+            }
+        """
+        page = max(1, page)
+        page_size = max(1, min(100, page_size))
+        
+        total = self.get_export_history_count()
+        
+        total_pages = (total + page_size - 1) // page_size if total > 0 else 1
+        
+        offset = (page - 1) * page_size
+        
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT 
+                id as history_id,
+                scene_type,
+                student_name,
+                student_id,
+                input_text,
+                page_size,
+                export_count,
+                config_data,
+                created_at,
+                updated_at
+            FROM export_history 
+            ORDER BY updated_at DESC
+            LIMIT ? OFFSET ?
+        """, (page_size, offset))
+        
+        rows = cursor.fetchall()
+        conn.close()
+        
+        history_list = [ExportHistory.from_dict(dict(row)) for row in rows]
+        
+        return {
+            "history": history_list,
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "total_pages": total_pages
+        }
+    
+    def get_export_history_count(self) -> int:
+        """
+        获取导出历史总数
+        
+        Returns:
+            导出历史数量
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("SELECT COUNT(*) FROM export_history")
         count = cursor.fetchone()[0]
         
         conn.close()
