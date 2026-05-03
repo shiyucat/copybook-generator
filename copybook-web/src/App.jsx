@@ -188,6 +188,10 @@ function App() {
     }
   }, [loginStudentNo])
 
+  const handleSwitchToStudent = useCallback(() => {
+    setShowStudentLoginDialog(true)
+  }, [])
+
   const handleSwitchToTeacher = useCallback(() => {
     setUserMode(USER_MODE_TEACHER)
     setCurrentStudent(null)
@@ -233,78 +237,6 @@ function App() {
     setActivePage('editor')
     alert('作业已导入字帖编辑器，可进行打印')
   }, [currentConfig, currentStudent])
-
-  const renderModeSwitcher = () => {
-    return (
-      <div 
-        style={{
-          position: 'fixed',
-          top: '16px',
-          right: '16px',
-          zIndex: 1000,
-          display: 'flex',
-          alignItems: 'center',
-          gap: '12px',
-        }}
-      >
-        {userMode === USER_MODE_STUDENT && currentStudent && (
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            padding: '8px 16px',
-            backgroundColor: '#e3f2fd',
-            borderRadius: '20px',
-            fontSize: '14px',
-            color: '#1565c0',
-          }}>
-            <span style={{ fontSize: '16px' }}>👤</span>
-            <span>
-              <strong>{currentStudent.name}</strong>
-              {currentStudent.class_name && ` · ${currentStudent.class_name}班`}
-            </span>
-          </div>
-        )}
-        {userMode === USER_MODE_TEACHER ? (
-          <button
-            onClick={() => setShowStudentLoginDialog(true)}
-            style={{
-              padding: '10px 20px',
-              backgroundColor: '#2196f3',
-              color: 'white',
-              border: 'none',
-              borderRadius: '20px',
-              fontSize: '14px',
-              fontWeight: '500',
-              cursor: 'pointer',
-              boxShadow: '0 2px 8px rgba(33, 150, 243, 0.3)',
-              transition: 'all 0.2s',
-            }}
-          >
-            切换为学生
-          </button>
-        ) : (
-          <button
-            onClick={handleSwitchToTeacher}
-            style={{
-              padding: '10px 20px',
-              backgroundColor: '#ff9800',
-              color: 'white',
-              border: 'none',
-              borderRadius: '20px',
-              fontSize: '14px',
-              fontWeight: '500',
-              cursor: 'pointer',
-              boxShadow: '0 2px 8px rgba(255, 152, 0, 0.3)',
-              transition: 'all 0.2s',
-            }}
-          >
-            切换为老师
-          </button>
-        )}
-      </div>
-    )
-  }
 
   const renderStudentLoginDialog = () => {
     if (!showStudentLoginDialog) return null
@@ -365,6 +297,9 @@ function App() {
         activePage={activePage} 
         onPageChange={setActivePage}
         userMode={userMode}
+        currentStudent={currentStudent}
+        onSwitchToStudent={handleSwitchToStudent}
+        onSwitchToTeacher={handleSwitchToTeacher}
       />
       <main className="main-content">
         {userMode === USER_MODE_TEACHER && (
@@ -417,7 +352,6 @@ function App() {
           </>
         )}
       </main>
-      {renderModeSwitcher()}
       {renderStudentLoginDialog()}
       {showAssignmentDialog && selectedStudentForAssignment && (
         <AssignmentDialog
