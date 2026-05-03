@@ -13,6 +13,7 @@ const DEFAULT_FONT_COLOR = '#000000'
 const DEFAULT_PINYIN_COLOR = '#000000'
 const DEFAULT_CHARACTER_COLOR = '#000000'
 const DEFAULT_RIGHT_GRID_COLOR = '#000000'
+const DEFAULT_STROKE_ORDER_COLOR = '#000000'
 const DEFAULT_SHOW_CHARACTER_PINYIN = true
 const DEFAULT_RIGHT_GRID_TYPE = '米字格'
 
@@ -59,10 +60,11 @@ const PRINT_CONFIG = {
 }
 
 const CHARACTER_SCENE_CONFIG = {
-  CHARACTER_BOX_SIZE_MM: 40,
+  CHARACTER_BOX_SIZE_MM: 50,
   RIGHT_GRID_SIZE_MM: 20,
   GAP_SIZE_MM: 2,
   RIGHT_GRID_ROWS: 2,
+  STROKE_ORDER_ROW_HEIGHT_MM: 10,
 }
 
 function CopybookEditor({ config, onConfigChange, selectedTemplateId: propSelectedTemplateId, onTemplateIdChange }) {
@@ -119,6 +121,11 @@ function CopybookEditor({ config, onConfigChange, selectedTemplateId: propSelect
   const [rightGridType, setRightGridType] = useState(
     safeConfig.right_grid_type ?? DEFAULT_RIGHT_GRID_TYPE
   )
+  const [strokeOrderColor, setStrokeOrderColor] = useState(
+    /^#[0-9A-Fa-f]{6}$/.test(safeConfig.stroke_order_color) 
+      ? safeConfig.stroke_order_color 
+      : DEFAULT_STROKE_ORDER_COLOR
+  )
 
   const gridSize = 60
 
@@ -173,6 +180,11 @@ function CopybookEditor({ config, onConfigChange, selectedTemplateId: propSelect
           : DEFAULT_RIGHT_GRID_COLOR
       )
       setRightGridType(config.right_grid_type ?? DEFAULT_RIGHT_GRID_TYPE)
+      setStrokeOrderColor(
+        /^#[0-9A-Fa-f]{6}$/.test(config.stroke_order_color) 
+          ? config.stroke_order_color 
+          : DEFAULT_STROKE_ORDER_COLOR
+      )
     }
   }, [config])
 
@@ -229,6 +241,11 @@ function CopybookEditor({ config, onConfigChange, selectedTemplateId: propSelect
           : DEFAULT_RIGHT_GRID_COLOR
       )
       setRightGridType(configData.right_grid_type ?? DEFAULT_RIGHT_GRID_TYPE)
+      setStrokeOrderColor(
+        /^#[0-9A-Fa-f]{6}$/.test(configData.stroke_order_color) 
+          ? configData.stroke_order_color 
+          : DEFAULT_STROKE_ORDER_COLOR
+      )
       setCurrentPage(0)
       alert('模版已应用')
     }
@@ -255,11 +272,12 @@ function CopybookEditor({ config, onConfigChange, selectedTemplateId: propSelect
       character_color: characterColor,
       right_grid_color: rightGridColor,
       right_grid_type: rightGridType,
+      stroke_order_color: strokeOrderColor,
     }
     if (onConfigChange) {
       onConfigChange(newConfig)
     }
-  }, [inputText, sceneType, gridType, gridColor, gridSizeCm, linesPerChar, showPinyin, pinyinColor, fontStyle, fontColor, studentName, studentId, className, pageSize, showCharacterPinyin, characterColor, rightGridColor, rightGridType, onConfigChange])
+  }, [inputText, sceneType, gridType, gridColor, gridSizeCm, linesPerChar, showPinyin, pinyinColor, fontStyle, fontColor, studentName, studentId, className, pageSize, showCharacterPinyin, characterColor, rightGridColor, rightGridType, strokeOrderColor, onConfigChange])
 
   const hexToRgba = (hex, alpha) => {
     const validHex = /^#[0-9A-Fa-f]{6}$/.test(hex) ? hex : DEFAULT_GRID_COLOR
@@ -469,11 +487,173 @@ function CopybookEditor({ config, onConfigChange, selectedTemplateId: propSelect
     }
   }, [])
 
-  const drawCharacterRow = useCallback((ctx, x, y, rowWidth, character, pinyin, gridColor, fontColor, pinyinColor, rightGridColor, rightGridType, mmToPx, showPinyin = false) => {
+  const STROKE_NAME_TO_CHAR = {
+    '横': '一',
+    '竖': '丨',
+    '撇': '丿',
+    '捺': '㇏',
+    '点': '丶',
+    '横折': '𠃍',
+    '竖钩': '亅',
+    '横钩': '乛',
+    '撇点': '𡿨',
+    '横撇': '㇇',
+    '捺钩': '㇏',
+    '竖折': '𠃊',
+    '竖弯': '㇄',
+    '横折钩': '𠃌',
+    '横折提': '㇊',
+    '横折弯': '㇍',
+    '横折折': '㇅',
+    '横折弯钩': '㇈',
+    '横撇弯钩': '㇌',
+    '横折折折': '㇎',
+    '横折折折钩': '㇉',
+    '竖提': '𠄌',
+    '竖折折': '㇞',
+    '竖折折钩': '㇉',
+    '斜钩': '㇂',
+    '卧钩': '㇃',
+    '弯钩': '㇁',
+    '撇折': '𠃋',
+    '撇折撇': '㇋',
+    '撇折点': '𡿨',
+    '横斜钩': '⺄',
+  }
+
+  const getStrokeOrderText = useCallback((character) => {
+    const defaultText = `笔顺：${character}`
+    
+    const strokesMap = {
+      '一': ['横'],
+      '二': ['横', '横'],
+      '三': ['横', '横', '横'],
+      '十': ['横', '竖'],
+      '人': ['撇', '捺'],
+      '大': ['横', '撇', '捺'],
+      '小': ['竖钩', '点', '点'],
+      '口': ['竖', '横折', '横'],
+      '日': ['竖', '横折', '横', '横'],
+      '月': ['撇', '横折钩', '横', '横'],
+      '水': ['竖钩', '横撇', '撇', '捺'],
+      '火': ['点', '撇', '撇', '捺'],
+      '山': ['竖', '竖折', '竖'],
+      '石': ['横', '撇', '竖', '横折', '横'],
+      '田': ['竖', '横折', '横', '竖', '横'],
+      '土': ['横', '竖', '横'],
+      '王': ['横', '横', '竖', '横'],
+      '木': ['横', '竖', '撇', '捺'],
+      '禾': ['撇', '横', '竖', '撇', '捺'],
+      '米': ['点', '撇', '横', '竖', '撇', '捺'],
+      '竹': ['撇', '横', '点', '撇', '横', '点'],
+      '鸟': ['撇', '横折钩', '点', '竖折折钩', '横'],
+      '马': ['横折', '竖折折钩', '横'],
+      '牛': ['撇', '横', '横', '竖'],
+      '羊': ['点', '撇', '横', '横', '横', '竖'],
+      '犬': ['横', '撇', '捺', '点'],
+      '龙': ['横', '撇', '竖弯钩', '撇', '点'],
+      '虎': ['竖', '横', '横撇', '撇', '横', '竖弯钩', '撇', '横折弯钩'],
+      '心': ['点', '卧钩', '点', '点'],
+      '手': ['撇', '横', '横', '竖钩'],
+      '耳': ['横', '竖', '竖', '横', '横', '横'],
+      '目': ['竖', '横折', '横', '横', '横'],
+      '虫': ['竖', '横折', '横', '竖', '横', '点'],
+      '云': ['横', '横', '撇折', '点'],
+      '电': ['竖', '横折', '横', '横', '竖弯钩'],
+      '雨': ['横', '竖', '横折钩', '竖', '点', '点', '点', '点'],
+      '风': ['撇', '横折弯钩', '撇', '点'],
+      '花': ['横', '竖', '竖', '撇', '竖', '撇', '竖弯钩'],
+      '草': ['横', '竖', '竖', '竖', '横折', '横', '横', '横', '竖'],
+      '树': ['横', '竖', '撇', '点', '横', '竖', '横折', '横', '横', '竖钩', '点', '点'],
+      '林': ['横', '竖', '撇', '点', '横', '竖', '撇', '捺'],
+      '森': ['横', '竖', '撇', '捺', '横', '竖', '撇', '点', '横', '竖', '撇', '捺'],
+      '男': ['竖', '横折', '横', '竖', '横', '横折钩', '撇'],
+      '女': ['撇点', '撇', '横'],
+      '开': ['横', '横', '撇', '竖'],
+      '关': ['点', '撇', '横', '横', '撇', '捺'],
+      '正': ['横', '竖', '横', '竖', '横'],
+      '反': ['撇', '横撇', '捺'],
+      '文': ['点', '横', '撇', '捺'],
+      '六': ['点', '横', '撇', '点'],
+      '七': ['横', '竖弯钩'],
+      '八': ['撇', '捺'],
+      '九': ['撇', '横折弯钩'],
+      '四': ['竖', '横折', '撇', '竖折', '横'],
+      '五': ['横', '竖', '横折', '横'],
+      '六': ['点', '横', '撇', '点'],
+      '七': ['横', '竖弯钩'],
+      '八': ['撇', '捺'],
+      '九': ['撇', '横折弯钩'],
+      '十': ['横', '竖'],
+      '百': ['横', '撇', '竖', '横折', '横', '横'],
+      '千': ['撇', '横', '竖'],
+      '万': ['横', '横折钩', '撇'],
+      '上': ['竖', '横', '横'],
+      '下': ['横', '竖', '点'],
+      '左': ['横', '撇', '横', '竖', '横'],
+      '右': ['横', '撇', '竖', '横折', '横'],
+      '中': ['竖', '横折', '横', '竖'],
+      '东': ['横', '撇折', '竖钩', '撇', '点'],
+      '西': ['横', '竖', '横折', '撇', '竖折', '横'],
+      '南': ['横', '竖', '竖', '横折钩', '点', '撇', '横', '横', '竖'],
+      '北': ['竖', '横', '提', '撇', '竖弯钩'],
+      '你': ['撇', '竖', '撇', '横撇', '竖钩', '撇', '点'],
+      '我': ['撇', '横', '竖钩', '提', '斜钩', '撇', '点'],
+      '他': ['撇', '竖', '横折钩', '竖', '竖弯钩'],
+      '们': ['撇', '竖', '点', '竖', '横折钩'],
+      '说': ['点', '横折提', '点', '撇', '竖', '横折', '横', '撇', '竖弯钩'],
+      '话': ['点', '横折提', '撇', '横', '竖', '竖', '横折', '横'],
+      '学': ['点', '点', '撇', '点', '横撇', '横撇', '竖钩', '横'],
+      '习': ['横折钩', '点', '提'],
+      '校': ['横', '竖', '撇', '点', '点', '横', '撇', '捺', '撇', '捺'],
+      '老': ['横', '竖', '横', '撇', '撇', '竖弯钩'],
+      '师': ['竖', '撇', '横', '竖', '横折钩', '竖'],
+      '好': ['撇点', '撇', '横', '横撇', '竖钩', '横'],
+      '爸': ['撇', '点', '撇', '捺', '横折', '竖', '横', '竖折折钩'],
+      '妈': ['撇点', '撇', '横', '横折', '竖折折钩', '横'],
+      '哥': ['横', '竖', '横折', '横', '竖', '横', '竖', '横折', '横', '竖钩'],
+      '弟': ['点', '撇', '横折', '横', '竖折折钩', '竖', '撇'],
+      '姐': ['撇点', '撇', '横', '竖', '横折', '横', '横', '横'],
+      '妹': ['撇点', '撇', '横', '横', '横', '竖', '撇', '捺'],
+    }
+    
+    const strokes = strokesMap[character]
+    if (!strokes || strokes.length === 0) {
+      return defaultText
+    }
+    
+    const strokeChars = strokes.map(s => STROKE_NAME_TO_CHAR[s] || s)
+    
+    if (strokeChars.length === 1) {
+      return `笔顺：${character}`
+    }
+    
+    const firstStroke = strokeChars[0]
+    return `笔顺：${firstStroke}${character}`
+  }, [])
+
+  const drawStrokeOrderRow = useCallback((ctx, x, y, width, height, character, strokeOrderColor) => {
+    ctx.strokeStyle = hexToRgba(strokeOrderColor, 0.5)
+    ctx.lineWidth = 1
+    ctx.strokeRect(x, y, width, height)
+    
+    const strokeOrderText = getStrokeOrderText(character)
+    
+    const fontSize = Math.max(12, Math.floor(height * 0.5))
+    ctx.font = `${fontSize}px sans-serif`
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillStyle = strokeOrderColor
+    
+    ctx.fillText(strokeOrderText, x + width / 2, y + height / 2)
+  }, [getStrokeOrderText])
+
+  const drawCharacterRow = useCallback((ctx, x, y, rowWidth, character, pinyin, gridColor, fontColor, pinyinColor, rightGridColor, rightGridType, strokeOrderColor, mmToPx, showPinyin = false) => {
     const charBoxSize = mmToPx(CHARACTER_SCENE_CONFIG.CHARACTER_BOX_SIZE_MM)
     const gridSize = mmToPx(CHARACTER_SCENE_CONFIG.RIGHT_GRID_SIZE_MM)
     const gap = mmToPx(CHARACTER_SCENE_CONFIG.GAP_SIZE_MM)
     const rightRows = CHARACTER_SCENE_CONFIG.RIGHT_GRID_ROWS
+    const strokeOrderRowHeight = mmToPx(CHARACTER_SCENE_CONFIG.STROKE_ORDER_ROW_HEIGHT_MM)
 
     drawCharacterBox(ctx, x, y, charBoxSize, gridColor, character, fontColor, pinyin, pinyinColor, showPinyin)
 
@@ -481,6 +661,11 @@ function CopybookEditor({ config, onConfigChange, selectedTemplateId: propSelect
     const rightAreaWidth = rowWidth - charBoxSize - gap
 
     const cols = Math.max(1, Math.floor(rightAreaWidth / gridSize))
+
+    const rightGridsY = y
+    const strokeOrderRowY = rightGridsY + rightRows * gridSize
+
+    drawStrokeOrderRow(ctx, rightAreaX, strokeOrderRowY, cols * gridSize, strokeOrderRowHeight, character, strokeOrderColor)
 
     for (let row = 0; row < rightRows; row++) {
       for (let col = 0; col < cols; col++) {
@@ -494,7 +679,7 @@ function CopybookEditor({ config, onConfigChange, selectedTemplateId: propSelect
     }
 
     return charBoxSize
-  }, [drawCharacterBox, drawGrid])
+  }, [drawCharacterBox, drawGrid, drawStrokeOrderRow])
 
   const invalidChars = useMemo(() => {
     return (inputText || '')
@@ -596,7 +781,14 @@ function CopybookEditor({ config, onConfigChange, selectedTemplateId: propSelect
     const usableWidthMm = currentPageSize.width - PRINT_CONFIG.MARGIN_LEFT_MM - PRINT_CONFIG.MARGIN_RIGHT_MM
     const usableHeightMm = currentPageSize.height - PRINT_CONFIG.MARGIN_TOP_MM - PRINT_CONFIG.MARGIN_BOTTOM_MM
     
-    const rowHeightMm = CHARACTER_SCENE_CONFIG.CHARACTER_BOX_SIZE_MM + CHARACTER_SCENE_CONFIG.GAP_SIZE_MM
+    const charBoxSize = CHARACTER_SCENE_CONFIG.CHARACTER_BOX_SIZE_MM
+    const rightGridSize = CHARACTER_SCENE_CONFIG.RIGHT_GRID_SIZE_MM
+    const rightRows = CHARACTER_SCENE_CONFIG.RIGHT_GRID_ROWS
+    const strokeOrderRowHeight = CHARACTER_SCENE_CONFIG.STROKE_ORDER_ROW_HEIGHT_MM
+    const gap = CHARACTER_SCENE_CONFIG.GAP_SIZE_MM
+    
+    const rightAreaHeight = rightGridSize * rightRows + strokeOrderRowHeight
+    const rowHeightMm = Math.max(charBoxSize, rightAreaHeight) + gap
     const maxRowsPerPage = Math.max(1, Math.floor(usableHeightMm / rowHeightMm))
     
     return {
@@ -604,6 +796,11 @@ function CopybookEditor({ config, onConfigChange, selectedTemplateId: propSelect
       rowHeightMm,
       usableWidthMm,
       usableHeightMm,
+      charBoxSize,
+      rightGridSize,
+      rightRows,
+      strokeOrderRowHeight,
+      gap,
     }
   }, [pageSize])
 
@@ -777,6 +974,7 @@ function CopybookEditor({ config, onConfigChange, selectedTemplateId: propSelect
             pinyinColor,
             rightGridColor,
             rightGridType,
+            strokeOrderColor,
             mmToPx,
             showCharacterPinyin
           )
@@ -903,6 +1101,7 @@ function CopybookEditor({ config, onConfigChange, selectedTemplateId: propSelect
           character_color: characterColor,
           right_grid_color: rightGridColor,
           right_grid_type: rightGridType,
+          stroke_order_color: strokeOrderColor,
         },
       }
       await templateApi.create(templateData)
@@ -952,6 +1151,7 @@ function CopybookEditor({ config, onConfigChange, selectedTemplateId: propSelect
         character_color: characterColor,
         right_grid_color: rightGridColor,
         right_grid_type: rightGridType,
+        stroke_order_color: strokeOrderColor,
       }
       await exportApi.exportPdf(exportData)
       setShowExportDialog(false)
@@ -1397,6 +1597,35 @@ function CopybookEditor({ config, onConfigChange, selectedTemplateId: propSelect
                     const val = e.target.value
                     if (/^#[0-9A-Fa-f]{6}$/.test(val)) {
                       setGridColor(val)
+                    }
+                  }}
+                />
+              </div>
+            </div>
+
+            <h3 className="section-title" style={{ marginTop: '16px' }}>笔顺颜色</h3>
+            <div className="form-group">
+              <div className="color-input-row">
+                <input
+                  type="color"
+                  className="color-picker-input"
+                  value={strokeOrderColor}
+                  onChange={(e) => setStrokeOrderColor(e.target.value)}
+                />
+                <input
+                  type="text"
+                  className="form-input color-hex-input"
+                  value={strokeOrderColor}
+                  onChange={(e) => {
+                    const val = e.target.value
+                    if (/^#[0-9A-Fa-f]{0,6}$/.test(val)) {
+                      setStrokeOrderColor(val.length === 7 ? val : strokeOrderColor)
+                    }
+                  }}
+                  onBlur={(e) => {
+                    const val = e.target.value
+                    if (/^#[0-9A-Fa-f]{6}$/.test(val)) {
+                      setStrokeOrderColor(val)
                     }
                   }}
                 />

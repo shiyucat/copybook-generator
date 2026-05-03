@@ -51,12 +51,14 @@ DEFAULT_PINYIN_COLOR = (0.0, 0.0, 0.0)
 DEFAULT_CHARACTER_COLOR = (0.0, 0.0, 0.0)
 DEFAULT_RIGHT_GRID_COLOR = (0.0, 0.0, 0.0)
 DEFAULT_RIGHT_GRID_TYPE = "米字格"
+DEFAULT_STROKE_ORDER_COLOR = (0.0, 0.0, 0.0)
 
 CHARACTER_SCENE_CONFIG = {
-    "CHARACTER_BOX_SIZE_MM": 40,
+    "CHARACTER_BOX_SIZE_MM": 50,
     "RIGHT_GRID_SIZE_MM": 20,
     "GAP_SIZE_MM": 2,
     "RIGHT_GRID_ROWS": 2,
+    "STROKE_ORDER_ROW_HEIGHT_MM": 10,
 }
 
 try:
@@ -455,6 +457,40 @@ class StrokeDirection:
     TOP_TO_BOTTOM_RIGHT = "top_to_bottom_right"
     TOP_TO_BOTTOM_LEFT = "top_to_bottom_left"
     CURVED = "curved"
+
+
+STROKE_NAME_TO_CHAR = {
+    "横": "一",
+    "竖": "丨",
+    "撇": "丿",
+    "捺": "㇏",
+    "点": "丶",
+    "横折": "𠃍",
+    "竖钩": "亅",
+    "横钩": "乛",
+    "撇点": "𡿨",
+    "横撇": "㇇",
+    "竖折": "𠃊",
+    "竖弯": "㇄",
+    "竖弯钩": "乚",
+    "卧钩": "㇃",
+    "斜钩": "㇂",
+    "横折钩": "𠃌",
+    "横折弯钩": "㇈",
+    "横斜钩": "⺄",
+    "竖折折钩": "㇉",
+    "横折折": "㇅",
+    "横折折撇": "㇋",
+    "横折撇": "㇇",
+    "撇折": "𠃋",
+    "提": "㇀",
+    "弯钩": "㇁",
+    "横折提": "𠊌",
+    "横折弯钩": "㇈",
+    "横撇弯钩": "㇌",
+    "横折折折钩": "㇎",
+    "竖折撇": "ㄥ",
+}
 
 
 class StrokeData:
@@ -1392,6 +1428,7 @@ class CopybookGenerator:
                  character_color: Tuple[float, float, float] = DEFAULT_CHARACTER_COLOR,
                  right_grid_color: Tuple[float, float, float] = DEFAULT_RIGHT_GRID_COLOR,
                  right_grid_type: str = DEFAULT_RIGHT_GRID_TYPE,
+                 stroke_order_color: Tuple[float, float, float] = DEFAULT_STROKE_ORDER_COLOR,
                  grid_size_cm: float = DEFAULT_GRID_SIZE_CM,
                  lines_per_char: int = DEFAULT_LINES_PER_CHAR,
                  show_pinyin: bool = DEFAULT_SHOW_PINYIN,
@@ -1416,6 +1453,7 @@ class CopybookGenerator:
             character_color: 生字颜色（RGB元组，值为0.0-1.0），默认黑色
             right_grid_color: 右侧格子颜色（RGB元组，值为0.0-1.0），默认黑色
             right_grid_type: 右侧格子类型，"田字格"、"米字格"、"回宫格"、"方格"，默认米字格
+            stroke_order_color: 笔顺颜色（RGB元组，值为0.0-1.0），默认黑色
             grid_size_cm: 格子大小（厘米），默认2.0cm
             lines_per_char: 每个字的行数，默认1行
             show_pinyin: 是否显示拼音（普通场景），默认False
@@ -1437,6 +1475,7 @@ class CopybookGenerator:
         self.character_color = character_color
         self.right_grid_color = right_grid_color
         self.right_grid_type = right_grid_type
+        self.stroke_order_color = stroke_order_color
         self.grid_size_cm = grid_size_cm
         self.lines_per_char = max(1, min(50, lines_per_char))
         self.show_pinyin = show_pinyin
@@ -2986,12 +3025,14 @@ class CopybookGenerator:
         right_grid_size = CHARACTER_SCENE_CONFIG["RIGHT_GRID_SIZE_MM"] * mm
         gap = CHARACTER_SCENE_CONFIG["GAP_SIZE_MM"] * mm
         right_rows = CHARACTER_SCENE_CONFIG["RIGHT_GRID_ROWS"]
+        stroke_order_row_height = CHARACTER_SCENE_CONFIG["STROKE_ORDER_ROW_HEIGHT_MM"] * mm
         
         right_area_width = usable_width - char_box_size - gap
         
         right_cols = max(1, int(right_area_width / right_grid_size))
         
-        row_height = char_box_size + gap
+        right_area_height = right_grid_size * right_rows + stroke_order_row_height
+        row_height = max(char_box_size, right_area_height) + gap
         max_rows_per_page = max(1, int(usable_height / row_height))
         
         return {
@@ -3004,7 +3045,133 @@ class CopybookGenerator:
             "max_rows_per_page": max_rows_per_page,
             "usable_width": usable_width,
             "usable_height": usable_height,
+            "stroke_order_row_height": stroke_order_row_height,
         }
+    
+    def _get_stroke_names(self, character: str) -> List[str]:
+        """
+        获取汉字的笔画名称列表
+        
+        Args:
+            character: 汉字字符
+            
+        Returns:
+            List[str]: 笔画名称列表，如果没有数据则返回空列表
+        """
+        if character in self.stroke_data:
+            return self.stroke_data[character]
+        return []
+    
+    def _get_stroke_chars(self, character: str) -> List[str]:
+        """
+        获取汉字的笔画字符列表（将笔画名称转换为笔画字符）
+        
+        Args:
+            character: 汉字字符
+            
+        Returns:
+            List[str]: 笔画字符列表
+        """
+        stroke_names = self._get_stroke_names(character)
+        stroke_chars = []
+        
+        for name in stroke_names:
+            if name in STROKE_NAME_TO_CHAR:
+                stroke_chars.append(STROKE_NAME_TO_CHAR[name])
+            else:
+                stroke_chars.append("□")
+        
+        return stroke_chars
+    
+    def _get_stroke_order_text(self, character: str) -> str:
+        """
+        获取笔顺展示文本
+        
+        格式："笔顺：xxxx"
+        例如"人"字："笔顺：丿人"（第一笔 + 完整字）
+        
+        Args:
+            character: 汉字字符
+            
+        Returns:
+            str: 笔顺展示文本
+        """
+        stroke_chars = self._get_stroke_chars(character)
+        
+        if not stroke_chars:
+            return f"笔顺：{character}"
+        
+        if len(stroke_chars) == 1:
+            return f"笔顺：{character}"
+        
+        first_stroke = stroke_chars[0]
+        
+        return f"笔顺：{first_stroke}{character}"
+    
+    def _get_progressive_stroke_texts(self, character: str) -> List[str]:
+        """
+        获取逐步书写的文本列表（从第一笔每次多写一笔，直到完整）
+        
+        例如"人"字：
+        - 第一笔："丿"
+        - 第二笔："人"（完整）
+        
+        例如"三"字：
+        - 第一笔："一"
+        - 第二笔："二"
+        - 第三笔："三"（完整）
+        
+        Args:
+            character: 汉字字符
+            
+        Returns:
+            List[str]: 逐步书写的文本列表
+        """
+        stroke_names = self._get_stroke_names(character)
+        stroke_count = len(stroke_names)
+        
+        if stroke_count == 0:
+            return [character]
+        
+        texts = []
+        
+        for i in range(1, stroke_count + 1):
+            partial = character[:i] if len(character) >= i else character
+            texts.append(partial)
+        
+        return texts
+    
+    def _draw_stroke_order_row(self, c: canvas.Canvas, x: float, y: float, 
+                                width: float, character: str = ""):
+        """
+        绘制笔顺行（右侧格子上方1cm高的行）
+        
+        Args:
+            c: PDF画布对象
+            x: 左下角x坐标
+            y: 左下角y坐标
+            width: 行宽度
+            character: 汉字字符
+        """
+        layout = self._calculate_character_scene_layout()
+        row_height = layout["stroke_order_row_height"]
+        
+        c.setStrokeColor(Color(self.grid_color[0], self.grid_color[1], self.grid_color[2]))
+        c.setLineWidth(0.5)
+        c.rect(x, y, width, row_height)
+        
+        if character:
+            stroke_order_text = self._get_stroke_order_text(character)
+            
+            font_size = max(10, int(row_height * 0.6))
+            c.setFillColor(Color(self.stroke_order_color[0], self.stroke_order_color[1], self.stroke_order_color[2]))
+            c.setFont(self.font_name, font_size)
+            
+            text_width = c.stringWidth(stroke_order_text, self.font_name, font_size)
+            text_x = x + (width - text_width) / 2
+            text_y = y + (row_height - font_size) / 2 + (font_size * 0.2)
+            
+            c.drawString(text_x, text_y, stroke_order_text)
     
     def _draw_character_box(self, c: canvas.Canvas, x: float, y: float, 
                             character: str = "", pinyin_text: str = "",
@@ -3097,7 +3264,7 @@ class CopybookGenerator:
                             character: str = "", pinyin_text: str = "",
                             show_pinyin: bool = False):
         """
-        绘制一整行生字（生字框 + 右侧米字格）
+        绘制一整行生字（生字框 + 右侧米字格 + 笔顺行）
         
         Args:
             c: PDF画布对象
@@ -3113,10 +3280,17 @@ class CopybookGenerator:
         gap = layout["gap"]
         right_cols = layout["right_cols"]
         right_rows = layout["right_rows"]
+        stroke_order_row_height = layout["stroke_order_row_height"]
         
         self._draw_character_box(c, x, y, character, pinyin_text, show_pinyin)
         
         right_area_x = x + char_box_size + gap
+        right_area_width = right_cols * right_grid_size
+        
+        right_grids_y = y
+        stroke_order_row_y = right_grids_y + right_rows * right_grid_size
+        
+        self._draw_stroke_order_row(c, right_area_x, stroke_order_row_y, right_area_width, character)
         
         for row in range(right_rows):
             for col in range(right_cols):
