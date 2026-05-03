@@ -110,6 +110,102 @@ class ExportHistory:
         )
 
 
+class Student:
+    """学生数据类"""
+    
+    def __init__(self, 
+                 student_id: int = None,
+                 name: str = "",
+                 student_no: str = "",
+                 class_name: str = "",
+                 created_at: str = None,
+                 updated_at: str = None):
+        self.student_id = student_id
+        self.name = name
+        self.student_no = student_no
+        self.class_name = class_name
+        self.created_at = created_at or datetime.now().isoformat()
+        self.updated_at = updated_at or self.created_at
+    
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "student_id": self.student_id,
+            "name": self.name,
+            "student_no": self.student_no,
+            "class_name": self.class_name,
+            "created_at": self.created_at,
+            "updated_at": self.updated_at
+        }
+    
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "Student":
+        return cls(
+            student_id=data.get("student_id"),
+            name=data.get("name", ""),
+            student_no=data.get("student_no", ""),
+            class_name=data.get("class_name", ""),
+            created_at=data.get("created_at"),
+            updated_at=data.get("updated_at")
+        )
+
+
+class Assignment:
+    """作业数据类"""
+    
+    STATUS_PENDING = "pending"
+    STATUS_COMPLETED = "completed"
+    
+    def __init__(self, 
+                 assignment_id: int = None,
+                 student_no: str = "",
+                 template_id: int = None,
+                 characters: str = "",
+                 scene_type: str = "normal",
+                 status: str = STATUS_PENDING,
+                 assigned_at: str = None,
+                 completed_at: str = None,
+                 config_data: Dict[str, Any] = None):
+        self.assignment_id = assignment_id
+        self.student_no = student_no
+        self.template_id = template_id
+        self.characters = characters
+        self.scene_type = scene_type
+        self.status = status
+        self.assigned_at = assigned_at or datetime.now().isoformat()
+        self.completed_at = completed_at
+        self.config_data = config_data or {}
+    
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "assignment_id": self.assignment_id,
+            "student_no": self.student_no,
+            "template_id": self.template_id,
+            "characters": self.characters,
+            "scene_type": self.scene_type,
+            "status": self.status,
+            "assigned_at": self.assigned_at,
+            "completed_at": self.completed_at,
+            "config_data": self.config_data
+        }
+    
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "Assignment":
+        config_data = data.get("config_data")
+        if isinstance(config_data, str):
+            config_data = json.loads(config_data)
+        return cls(
+            assignment_id=data.get("assignment_id"),
+            student_no=data.get("student_no", ""),
+            template_id=data.get("template_id"),
+            characters=data.get("characters", ""),
+            scene_type=data.get("scene_type", "normal"),
+            status=data.get("status", cls.STATUS_PENDING),
+            assigned_at=data.get("assigned_at"),
+            completed_at=data.get("completed_at"),
+            config_data=config_data or {}
+        )
+
+
 class TemplateDatabase:
     """模版数据库管理类"""
     
@@ -198,6 +294,58 @@ class TemplateDatabase:
         cursor.execute("""
             CREATE INDEX IF NOT EXISTS idx_export_history_updated_at 
             ON export_history(updated_at)
+        """)
+        
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS students (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL DEFAULT '',
+                student_no TEXT NOT NULL UNIQUE,
+                class_name TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+        """)
+        
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_student_no 
+            ON students(student_no)
+        """)
+        
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_student_class 
+            ON students(class_name)
+        """)
+        
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS assignments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                student_no TEXT NOT NULL DEFAULT '',
+                template_id INTEGER,
+                characters TEXT NOT NULL DEFAULT '',
+                scene_type TEXT NOT NULL DEFAULT 'normal',
+                status TEXT NOT NULL DEFAULT 'pending',
+                assigned_at TEXT NOT NULL,
+                completed_at TEXT,
+                config_data TEXT NOT NULL DEFAULT '{}',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+        """)
+        
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_assignment_student_no 
+            ON assignments(student_no)
+        """)
+        
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_assignment_status 
+            ON assignments(status)
+        """)
+        
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_assignment_assigned_at 
+            ON assignments(assigned_at)
         """)
         
         conn.commit()
@@ -825,6 +973,570 @@ class TemplateDatabase:
             )
         else:
             cursor.execute("SELECT COUNT(*) FROM export_history")
+        
+        count = cursor.fetchone()[0]
+        
+        conn.close()
+        
+        return count
+    
+    def save_student(self, student: Student) -> int:
+        """
+        保存学生
+        如果 student_id 存在且不为 None，则根据 ID 更新
+        否则，如果 student_no 已存在，则更新；否则创建新学生
+        
+        Args:
+            student: 学生对象
+            
+        Returns:
+            学生ID
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        
+        now = datetime.now().isoformat()
+        
+        if student.student_id is not None:
+            existing_by_id = self.get_student_by_id(student.student_id)
+            if existing_by_id:
+                cursor.execute("""
+                    UPDATE students 
+                    SET name = ?, student_no = ?, class_name = ?, updated_at = ?
+                    WHERE id = ?
+                """, (
+                    student.name,
+                    student.student_no,
+                    student.class_name,
+                    now,
+                    student.student_id
+                ))
+                conn.commit()
+                conn.close()
+                return student.student_id
+        
+        existing_by_no = self.get_student_by_no(student.student_no)
+        
+        if existing_by_no:
+            cursor.execute("""
+                UPDATE students 
+                SET name = ?, class_name = ?, updated_at = ?
+                WHERE student_no = ?
+            """, (
+                student.name,
+                student.class_name,
+                now,
+                student.student_no
+            ))
+            student_id = existing_by_no.student_id
+        else:
+            cursor.execute("""
+                INSERT INTO students (name, student_no, class_name, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?)
+            """, (
+                student.name,
+                student.student_no,
+                student.class_name,
+                now,
+                now
+            ))
+            student_id = cursor.lastrowid
+        
+        conn.commit()
+        conn.close()
+        
+        return student_id
+    
+    def get_student_by_id(self, student_id: int) -> Optional[Student]:
+        """
+        根据ID获取学生
+        
+        Args:
+            student_id: 学生ID
+            
+        Returns:
+            学生对象，如果不存在返回 None
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT id as student_id, name, student_no, class_name, created_at, updated_at
+            FROM students 
+            WHERE id = ?
+        """, (student_id,))
+        
+        row = cursor.fetchone()
+        conn.close()
+        
+        if row:
+            return Student.from_dict(dict(row))
+        return None
+    
+    def get_student_by_no(self, student_no: str) -> Optional[Student]:
+        """
+        根据学号获取学生
+        
+        Args:
+            student_no: 学号
+            
+        Returns:
+            学生对象，如果不存在返回 None
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT id as student_id, name, student_no, class_name, created_at, updated_at
+            FROM students 
+            WHERE student_no = ?
+        """, (student_no,))
+        
+        row = cursor.fetchone()
+        conn.close()
+        
+        if row:
+            return Student.from_dict(dict(row))
+        return None
+    
+    def get_all_students(self) -> List[Student]:
+        """
+        获取所有学生
+        
+        Returns:
+            学生列表，按创建时间降序排列
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT id as student_id, name, student_no, class_name, created_at, updated_at
+            FROM students 
+            ORDER BY created_at DESC
+        """)
+        
+        rows = cursor.fetchall()
+        conn.close()
+        
+        return [Student.from_dict(dict(row)) for row in rows]
+    
+    def get_students_paginated(self, page: int = 1, page_size: int = 10) -> Dict[str, Any]:
+        """
+        分页获取学生
+        
+        Args:
+            page: 页码，从1开始
+            page_size: 每页数量
+            
+        Returns:
+            包含分页信息的字典
+        """
+        page = max(1, page)
+        page_size = max(1, min(100, page_size))
+        
+        total = self.get_student_count()
+        
+        total_pages = (total + page_size - 1) // page_size if total > 0 else 1
+        
+        offset = (page - 1) * page_size
+        
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT id as student_id, name, student_no, class_name, created_at, updated_at
+            FROM students 
+            ORDER BY created_at DESC
+            LIMIT ? OFFSET ?
+        """, (page_size, offset))
+        
+        rows = cursor.fetchall()
+        conn.close()
+        
+        students = [Student.from_dict(dict(row)) for row in rows]
+        
+        return {
+            "students": students,
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "total_pages": total_pages
+        }
+    
+    def search_students_paginated(
+        self, 
+        keyword: str, 
+        page: int = 1, 
+        page_size: int = 10
+    ) -> Dict[str, Any]:
+        """
+        按关键字搜索学生（支持姓名、学号、班级的模糊匹配）
+        
+        Args:
+            keyword: 搜索关键字
+            page: 页码
+            page_size: 每页数量
+            
+        Returns:
+            包含分页信息的字典
+        """
+        page = max(1, page)
+        page_size = max(1, min(100, page_size))
+        
+        search_pattern = f'%{keyword}%'
+        
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT COUNT(*) 
+            FROM students 
+            WHERE name LIKE ? OR student_no LIKE ? OR class_name LIKE ?
+        """, (search_pattern, search_pattern, search_pattern))
+        total = cursor.fetchone()[0]
+        
+        total_pages = (total + page_size - 1) // page_size if total > 0 else 1
+        
+        offset = (page - 1) * page_size
+        
+        cursor.execute("""
+            SELECT 
+                id as student_id, name, student_no, class_name, created_at, updated_at
+            FROM students 
+            WHERE name LIKE ? OR student_no LIKE ? OR class_name LIKE ?
+            ORDER BY updated_at DESC
+            LIMIT ? OFFSET ?
+        """, (search_pattern, search_pattern, search_pattern, page_size, offset))
+        
+        rows = cursor.fetchall()
+        conn.close()
+        
+        students = [Student.from_dict(dict(row)) for row in rows]
+        
+        return {
+            "students": students,
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "total_pages": total_pages
+        }
+    
+    def delete_student(self, student_id: int) -> bool:
+        """
+        删除学生
+        
+        Args:
+            student_id: 学生ID
+            
+        Returns:
+            是否成功删除
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("DELETE FROM students WHERE id = ?", (student_id,))
+        affected = cursor.rowcount
+        
+        conn.commit()
+        conn.close()
+        
+        return affected > 0
+    
+    def get_student_count(self, keyword: str = None) -> int:
+        """
+        获取学生总数
+        
+        Args:
+            keyword: 可选的搜索关键字
+            
+        Returns:
+            学生数量
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        
+        if keyword:
+            search_pattern = f'%{keyword}%'
+            cursor.execute(
+                "SELECT COUNT(*) FROM students WHERE name LIKE ? OR student_no LIKE ? OR class_name LIKE ?",
+                (search_pattern, search_pattern, search_pattern)
+            )
+        else:
+            cursor.execute("SELECT COUNT(*) FROM students")
+        
+        count = cursor.fetchone()[0]
+        
+        conn.close()
+        
+        return count
+    
+    def save_assignment(self, assignment: Assignment) -> int:
+        """
+        保存作业
+        
+        Args:
+            assignment: 作业对象
+            
+        Returns:
+            作业ID
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        
+        now = datetime.now().isoformat()
+        
+        if assignment.assignment_id is not None:
+            existing = self.get_assignment_by_id(assignment.assignment_id)
+            if existing:
+                cursor.execute("""
+                    UPDATE assignments 
+                    SET student_no = ?, template_id = ?, characters = ?, scene_type = ?, 
+                        status = ?, assigned_at = ?, completed_at = ?, config_data = ?, updated_at = ?
+                    WHERE id = ?
+                """, (
+                    assignment.student_no,
+                    assignment.template_id,
+                    assignment.characters,
+                    assignment.scene_type,
+                    assignment.status,
+                    assignment.assigned_at,
+                    assignment.completed_at,
+                    json.dumps(assignment.config_data, ensure_ascii=False),
+                    now,
+                    assignment.assignment_id
+                ))
+                conn.commit()
+                conn.close()
+                return assignment.assignment_id
+        
+        cursor.execute("""
+            INSERT INTO assignments (
+                student_no, template_id, characters, scene_type, 
+                status, assigned_at, completed_at, config_data, created_at, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            assignment.student_no,
+            assignment.template_id,
+            assignment.characters,
+            assignment.scene_type,
+            assignment.status,
+            assignment.assigned_at,
+            assignment.completed_at,
+            json.dumps(assignment.config_data, ensure_ascii=False),
+            now,
+            now
+        ))
+        assignment_id = cursor.lastrowid
+        
+        conn.commit()
+        conn.close()
+        
+        return assignment_id
+    
+    def get_assignment_by_id(self, assignment_id: int) -> Optional[Assignment]:
+        """
+        根据ID获取作业
+        
+        Args:
+            assignment_id: 作业ID
+            
+        Returns:
+            作业对象，如果不存在返回 None
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT id as assignment_id, student_no, template_id, characters, 
+                   scene_type, status, assigned_at, completed_at, config_data,
+                   created_at, updated_at
+            FROM assignments 
+            WHERE id = ?
+        """, (assignment_id,))
+        
+        row = cursor.fetchone()
+        conn.close()
+        
+        if row:
+            return Assignment.from_dict(dict(row))
+        return None
+    
+    def get_assignments_by_student_no(self, student_no: str) -> List[Assignment]:
+        """
+        根据学号获取该学生的所有作业
+        
+        Args:
+            student_no: 学号
+            
+        Returns:
+            作业列表，按布置时间降序排列
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT id as assignment_id, student_no, template_id, characters, 
+                   scene_type, status, assigned_at, completed_at, config_data,
+                   created_at, updated_at
+            FROM assignments 
+            WHERE student_no = ?
+            ORDER BY assigned_at DESC
+        """, (student_no,))
+        
+        rows = cursor.fetchall()
+        conn.close()
+        
+        return [Assignment.from_dict(dict(row)) for row in rows]
+    
+    def get_assignments_paginated(
+        self, 
+        student_no: str = None,
+        status: str = None,
+        page: int = 1, 
+        page_size: int = 10
+    ) -> Dict[str, Any]:
+        """
+        分页获取作业
+        
+        Args:
+            student_no: 可选的学号过滤
+            status: 可选的状态过滤
+            page: 页码
+            page_size: 每页数量
+            
+        Returns:
+            包含分页信息的字典
+        """
+        page = max(1, page)
+        page_size = max(1, min(100, page_size))
+        
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        
+        conditions = []
+        params = []
+        
+        if student_no:
+            conditions.append("student_no = ?")
+            params.append(student_no)
+        
+        if status:
+            conditions.append("status = ?")
+            params.append(status)
+        
+        where_clause = " AND ".join(conditions) if conditions else "1=1"
+        
+        count_sql = f"SELECT COUNT(*) FROM assignments WHERE {where_clause}"
+        cursor.execute(count_sql, params)
+        total = cursor.fetchone()[0]
+        
+        total_pages = (total + page_size - 1) // page_size if total > 0 else 1
+        
+        offset = (page - 1) * page_size
+        
+        select_sql = f"""
+            SELECT id as assignment_id, student_no, template_id, characters, 
+                   scene_type, status, assigned_at, completed_at, config_data,
+                   created_at, updated_at
+            FROM assignments 
+            WHERE {where_clause}
+            ORDER BY assigned_at DESC
+            LIMIT ? OFFSET ?
+        """
+        params.extend([page_size, offset])
+        cursor.execute(select_sql, params)
+        
+        rows = cursor.fetchall()
+        conn.close()
+        
+        assignments = [Assignment.from_dict(dict(row)) for row in rows]
+        
+        return {
+            "assignments": assignments,
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "total_pages": total_pages
+        }
+    
+    def mark_assignment_completed(self, assignment_id: int) -> bool:
+        """
+        标记作业为已完成
+        
+        Args:
+            assignment_id: 作业ID
+            
+        Returns:
+            是否成功更新
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        
+        now = datetime.now().isoformat()
+        
+        cursor.execute("""
+            UPDATE assignments 
+            SET status = ?, completed_at = ?, updated_at = ?
+            WHERE id = ?
+        """, (Assignment.STATUS_COMPLETED, now, now, assignment_id))
+        
+        affected = cursor.rowcount
+        conn.commit()
+        conn.close()
+        
+        return affected > 0
+    
+    def delete_assignment(self, assignment_id: int) -> bool:
+        """
+        删除作业
+        
+        Args:
+            assignment_id: 作业ID
+            
+        Returns:
+            是否成功删除
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("DELETE FROM assignments WHERE id = ?", (assignment_id,))
+        affected = cursor.rowcount
+        
+        conn.commit()
+        conn.close()
+        
+        return affected > 0
+    
+    def get_assignment_count(self, student_no: str = None, status: str = None) -> int:
+        """
+        获取作业总数
+        
+        Args:
+            student_no: 可选的学号过滤
+            status: 可选的状态过滤
+            
+        Returns:
+            作业数量
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        
+        conditions = []
+        params = []
+        
+        if student_no:
+            conditions.append("student_no = ?")
+            params.append(student_no)
+        
+        if status:
+            conditions.append("status = ?")
+            params.append(status)
+        
+        where_clause = " AND ".join(conditions) if conditions else "1=1"
+        
+        sql = f"SELECT COUNT(*) FROM assignments WHERE {where_clause}"
+        cursor.execute(sql, params)
         
         count = cursor.fetchone()[0]
         
