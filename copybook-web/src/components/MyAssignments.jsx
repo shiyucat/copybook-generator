@@ -735,7 +735,7 @@ function MyAssignments({ studentNo, onImportAssignment }) {
                   <th style={{ width: '120px' }}>场景类型</th>
                   <th style={{ width: '160px' }}>布置时间</th>
                   <th style={{ width: '160px' }}>提交时间</th>
-                  <th style={{ width: '80px' }}>状态</th>
+                  <th style={{ width: '100px' }}>状态</th>
                   <th style={{ width: '300px' }}>练习文字</th>
                   <th style={{ width: '300px', textAlign: 'right' }}>操作</th>
                 </tr>
@@ -755,7 +755,7 @@ function MyAssignments({ studentNo, onImportAssignment }) {
                       <td style={{ color: assignment.submitted_at ? '#2196f3' : '#999' }}>
                         {formatDateTime(assignment.submitted_at)}
                       </td>
-                      <td>
+                      <td style={{ whiteSpace: 'nowrap' }}>
                         <span style={{
                           padding: '4px 12px',
                           borderRadius: '20px',
