@@ -52,6 +52,8 @@ DEFAULT_CHARACTER_COLOR = (0.0, 0.0, 0.0)
 DEFAULT_RIGHT_GRID_COLOR = (0.0, 0.0, 0.0)
 DEFAULT_RIGHT_GRID_TYPE = "米字格"
 DEFAULT_STROKE_ORDER_COLOR = (0.0, 0.0, 0.0)
+DEFAULT_SHOW_TRACE_COPY = False
+DEFAULT_TRACE_COPY_ALPHA = 0.3
 
 CHARACTER_SCENE_CONFIG = {
     "CHARACTER_BOX_SIZE_MM": 50,
@@ -1435,7 +1437,9 @@ class CopybookGenerator:
                  show_character_pinyin: bool = DEFAULT_SHOW_CHARACTER_PINYIN,
                  student_name: str = "",
                  student_id: str = "",
-                 class_name: str = ""):
+                 class_name: str = "",
+                 show_trace_copy: bool = DEFAULT_SHOW_TRACE_COPY,
+                 trace_copy_alpha: float = DEFAULT_TRACE_COPY_ALPHA):
         """
         初始化字帖生成器
         
@@ -1461,6 +1465,8 @@ class CopybookGenerator:
             student_name: 学生姓名
             student_id: 学号
             class_name: 班级
+            show_trace_copy: 是否显示描红（生字场景右侧格子），默认False
+            trace_copy_alpha: 描红透明度，默认0.3（30%）
         """
         self.paper_width, self.paper_height = paper_size
         self.grid_cols = grid_cols
@@ -1480,15 +1486,17 @@ class CopybookGenerator:
         self.lines_per_char = max(1, min(50, lines_per_char))
         self.show_pinyin = show_pinyin
         self.show_character_pinyin = show_character_pinyin
+        self.show_trace_copy = show_trace_copy
+        self.trace_copy_alpha = max(0.0, min(1.0, trace_copy_alpha))
         
         self.student_name = student_name or ""
         self.student_id = student_id or ""
         self.class_name = class_name or ""
         
-        self.margin_left = 20 * mm
-        self.margin_right = 20 * mm
-        self.margin_top = 30 * mm
-        self.margin_bottom = 20 * mm
+        self.margin_left = 10 * mm
+        self.margin_right = 10 * mm
+        self.margin_top = 25 * mm
+        self.margin_bottom = 15 * mm
         
         self._init_font(font_path)
         self._calculate_grid_dimensions()
@@ -3048,6 +3056,29 @@ class CopybookGenerator:
             "stroke_order_row_height": stroke_order_row_height,
         }
     
+    def _get_stroke_count(self, character: str) -> int:
+        """
+        获取汉字的笔画数量
+        
+        优先从 hanzi-writer 数据获取，其次从本地 stroke_data 获取
+        
+        Args:
+            character: 汉字字符
+            
+        Returns:
+            int: 笔画数量，如果没有数据则返回 0
+        """
+        hanzi_data = self._get_hanzi_writer_data(character)
+        if hanzi_data:
+            medians = hanzi_data.get('medians', [])
+            if medians:
+                return len(medians)
+        
+        if character in self.stroke_data:
+            return len(self.stroke_data[character])
+        
+        return 0
+    
     def _get_stroke_names(self, character: str) -> List[str]:
         """
         获取汉字的笔画名称列表
@@ -3155,10 +3186,142 @@ class CopybookGenerator:
         
         return texts
     
+    def _get_progressive_stroke_items(self, character: str) -> List[Dict[str, Any]]:
+        """
+        获取逐步书写的项目列表
+        
+        例如"人"字（2笔）：
+        - 第1项：{"type": "stroke", "text": "1", "is_written": True}
+        - 第2项：{"type": "arrow", "text": "→"}
+        - 第3项：{"type": "char", "text": "人", "is_written": True}
+        
+        例如"三"字（3笔）：
+        - 第1项：{"type": "stroke", "text": "1", "is_written": True}
+        - 第2项：{"type": "arrow", "text": "→"}
+        - 第3项：{"type": "stroke", "text": "2", "is_written": True}
+        - 第4项：{"type": "arrow", "text": "→"}
+        - 第5项：{"type": "stroke", "text": "3", "is_written": True}
+        - 第6项：{"type": "arrow", "text": "→"}
+        - 第7项：{"type": "char", "text": "三", "is_written": True}
+        
+        Args:
+            character: 汉字字符
+            
+        Returns:
+            List[Dict]: 项目列表
+        """
+        stroke_count = self._get_stroke_count(character)
+        
+        if stroke_count == 0:
+            return [{"type": "char", "text": character, "is_written": True}]
+        
+        items = []
+        
+        for i in range(1, stroke_count + 1):
+            if i > 1:
+                items.append({"type": "arrow", "text": "→"})
+            items.append({"type": "stroke", "text": str(i), "is_written": True})
+        
+        items.append({"type": "arrow", "text": "→"})
+        items.append({"type": "char", "text": character, "is_written": True})
+        
+        return items
+    
+    def _calculate_stroke_order_layout(self, 
+                                         c: canvas.Canvas, 
+                                         character: str, 
+                                         max_width: float, 
+                                         row_height: float) -> Dict[str, Any]:
+        """
+        计算笔顺行的布局
+        
+        Args:
+            c: PDF画布对象
+            character: 汉字字符
+            max_width: 最大宽度
+            row_height: 行高度
+            
+        Returns:
+            Dict: 布局信息
+        """
+        items = self._get_progressive_stroke_items(character)
+        
+        base_font_size = max(10, int(row_height * 0.6))
+        
+        current_font_size = base_font_size
+        c.setFont(self.font_name, current_font_size)
+        
+        total_width = 0
+        item_widths = []
+        gap = current_font_size * 0.3
+        
+        for item in items:
+            w = c.stringWidth(item["text"], self.font_name, current_font_size)
+            item_widths.append(w)
+            total_width += w
+        
+        total_width += gap * (len(items) - 1)
+        
+        need_wrap = total_width > max_width
+        rows_needed = 1
+        use_smaller_font = False
+        
+        if need_wrap:
+            shrink_ratio = max_width / total_width
+            if shrink_ratio >= 0.7:
+                current_font_size = int(current_font_size * shrink_ratio)
+                need_wrap = False
+            else:
+                rows_needed = 2
+                use_smaller_font = True
+                current_font_size = int(base_font_size * 0.5)
+        
+        if use_smaller_font:
+            c.setFont(self.font_name, current_font_size)
+            total_width = 0
+            item_widths = []
+            gap = current_font_size * 0.3
+            
+            for item in items:
+                w = c.stringWidth(item["text"], self.font_name, current_font_size)
+                item_widths.append(w)
+                total_width += w
+            
+            total_width += gap * (len(items) - 1)
+            
+            if total_width > max_width * 2 and rows_needed == 2:
+                shrink_ratio = (max_width * 2) / total_width
+                if shrink_ratio < 1.0:
+                    current_font_size = max(6, int(current_font_size * shrink_ratio))
+                    c.setFont(self.font_name, current_font_size)
+        
+        first_row_items = items
+        second_row_items = []
+        
+        if rows_needed == 2:
+            mid = len(items) // 2
+            first_row_items = items[:mid]
+            second_row_items = items[mid:]
+        
+        return {
+            "font_size": current_font_size,
+            "gap": current_font_size * 0.3,
+            "rows_needed": rows_needed,
+            "first_row_items": first_row_items,
+            "second_row_items": second_row_items,
+            "use_smaller_font": use_smaller_font,
+        }
+    
     def _draw_stroke_order_row(self, c: canvas.Canvas, x: float, y: float, 
                                 width: float, character: str = ""):
         """
-        绘制笔顺行（右侧格子上方1cm高的行）
+        绘制笔顺行（右侧格子上方的长方形格子）
+        
+        功能：
+        1. 笔顺从第一笔开始写，然后写前两笔、前三笔、直至最终完成
+        2. 笔画较多时，压缩笔顺之间的间隔
+        3. 溢出时自动换行为两行，字体缩小一半
+        4. 书写范围不超过长方形格子
         
         Args:
             c: PDF画布对象
@@ -3174,18 +3337,51 @@ class CopybookGenerator:
         c.setLineWidth(0.5)
         c.rect(x, y, width, row_height)
         
-        if character:
-            stroke_order_text = self._get_stroke_order_text(character)
+        if not character:
+            return
+        
+        c.setFillColor(Color(self.stroke_order_color[0], self.stroke_order_color[1], self.stroke_order_color[2]))
+        
+        stroke_layout = self._calculate_stroke_order_layout(c, character, width, row_height)
+        font_size = stroke_layout["font_size"]
+        gap = stroke_layout["gap"]
+        rows_needed = stroke_layout["rows_needed"]
+        
+        c.setFont(self.font_name, font_size)
+        
+        def draw_items(items, start_x, base_y):
+            current_x = start_x
+            for item in items:
+                item_text = item["text"]
+                item_width = c.stringWidth(item_text, self.font_name, font_size)
+                
+                c.drawString(current_x, base_y, item_text)
+                current_x += item_width + gap
+        
+        if rows_needed == 1:
+            items = stroke_layout["first_row_items"]
+            total_width = sum(c.stringWidth(item["text"], self.font_name, font_size) for item in items) + gap * (len(items) - 1)
+            start_x = x + (width - total_width) / 2
+            base_y = y + (row_height - font_size) / 2 + (font_size * 0.2)
+            draw_items(items, start_x, base_y)
+        else:
+            first_items = stroke_layout["first_row_items"]
+            second_items = stroke_layout["second_row_items"]
             
-            font_size = max(10, int(row_height * 0.6))
-            c.setFillColor(Color(self.stroke_order_color[0], self.stroke_order_color[1], self.stroke_order_color[2]))
-            c.setFont(self.font_name, font_size)
+            first_width = sum(c.stringWidth(item["text"], self.font_name, font_size) for item in first_items) + gap * (len(first_items) - 1)
+            second_width = sum(c.stringWidth(item["text"], self.font_name, font_size) for item in second_items) + gap * (len(second_items) - 1)
             
-            text_width = c.stringWidth(stroke_order_text, self.font_name, font_size)
-            text_x = x + (width - text_width) / 2
-            text_y = y + (row_height - font_size) / 2 + (font_size * 0.2)
+            row_gap = font_size * 0.2
+            available_height = row_height - font_size * 2 - row_gap
             
-            c.drawString(text_x, text_y, stroke_order_text)
+            first_start_x = x + (width - first_width) / 2
+            second_start_x = x + (width - second_width) / 2
+            
+            first_y = y + row_height - font_size - available_height / 3
+            second_y = y + available_height / 3
+            
+            draw_items(first_items, first_start_x, first_y)
+            draw_items(second_items, second_start_x, second_y)
     
     def _draw_character_box(self, c: canvas.Canvas, x: float, y: float, 
                             character: str = "", pinyin_text: str = "",
@@ -3274,6 +3470,45 @@ class CopybookGenerator:
             inner_margin = size / 5
             c.rect(x + inner_margin, y + inner_margin, size - inner_margin * 2, size - inner_margin * 2)
     
+    def _draw_trace_copy_character(self, c: canvas.Canvas, x: float, y: float, 
+                                    size: float, character: str):
+        """
+        在格子中绘制描红字符（半透明）
+        
+        Args:
+            c: PDF画布对象
+            x: 格子左下角x坐标
+            y: 格子左下角y坐标
+            size: 格子大小
+            character: 汉字字符
+        """
+        if not character:
+            return
+        
+        from reportlab.lib.colors import Color
+        
+        char_font_size = int(size * 0.8)
+        
+        c.saveState()
+        
+        alpha_color = Color(
+            self.font_color[0], 
+            self.font_color[1], 
+            self.font_color[2], 
+            alpha=self.trace_copy_alpha
+        )
+        
+        c.setFillColor(alpha_color)
+        c.setFont(self.font_name, char_font_size)
+        
+        text_width = c.stringWidth(character, self.font_name, char_font_size)
+        text_x = x + (size - text_width) / 2
+        text_y = y + (size - char_font_size) / 2 + (char_font_size * 0.2)
+        
+        c.drawString(text_x, text_y, character)
+        
+        c.restoreState()
+    
     def _draw_character_row(self, c: canvas.Canvas, x: float, y: float, 
                             character: str = "", pinyin_text: str = "",
                             show_pinyin: bool = False):
@@ -3311,6 +3546,9 @@ class CopybookGenerator:
                 grid_x = right_area_x + col * right_grid_size
                 grid_y = y + row * right_grid_size
                 self._draw_right_grid(c, grid_x, grid_y)
+                
+                if self.show_trace_copy and character:
+                    self._draw_trace_copy_character(c, grid_x, grid_y, right_grid_size, character)
     
     def _draw_page_character_scene(self, c: canvas.Canvas, characters: List[str],
                                     start_char_index: int, page_num: int) -> int:

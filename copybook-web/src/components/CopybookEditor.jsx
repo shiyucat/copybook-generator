@@ -16,6 +16,8 @@ const DEFAULT_RIGHT_GRID_COLOR = '#000000'
 const DEFAULT_STROKE_ORDER_COLOR = '#000000'
 const DEFAULT_SHOW_CHARACTER_PINYIN = true
 const DEFAULT_RIGHT_GRID_TYPE = '米字格'
+const DEFAULT_SHOW_TRACE_COPY = false
+const DEFAULT_TRACE_COPY_ALPHA = 0.3
 
 const SceneType = {
   NORMAL: 'normal',
@@ -49,10 +51,10 @@ const DEFAULT_LINES_PER_CHAR = 1
 const DEFAULT_SHOW_PINYIN = false
 
 const PRINT_CONFIG = {
-  MARGIN_LEFT_MM: 20,
-  MARGIN_RIGHT_MM: 20,
-  MARGIN_TOP_MM: 30,
-  MARGIN_BOTTOM_MM: 20,
+  MARGIN_LEFT_MM: 10,
+  MARGIN_RIGHT_MM: 10,
+  MARGIN_TOP_MM: 25,
+  MARGIN_BOTTOM_MM: 15,
   HEADER_HEIGHT_MM: 10,
   GRID_COLS: 5,
   GRID_ROWS: 10,
@@ -126,6 +128,11 @@ function CopybookEditor({ config, onConfigChange, selectedTemplateId: propSelect
       ? safeConfig.stroke_order_color 
       : DEFAULT_STROKE_ORDER_COLOR
   )
+  const [showTraceCopy, setShowTraceCopy] = useState(
+    safeConfig.show_trace_copy !== undefined 
+      ? safeConfig.show_trace_copy 
+      : DEFAULT_SHOW_TRACE_COPY
+  )
 
   const gridSize = 60
 
@@ -184,6 +191,11 @@ function CopybookEditor({ config, onConfigChange, selectedTemplateId: propSelect
         /^#[0-9A-Fa-f]{6}$/.test(config.stroke_order_color) 
           ? config.stroke_order_color 
           : DEFAULT_STROKE_ORDER_COLOR
+      )
+      setShowTraceCopy(
+        config.show_trace_copy !== undefined 
+          ? config.show_trace_copy 
+          : DEFAULT_SHOW_TRACE_COPY
       )
     }
   }, [config])
@@ -246,6 +258,11 @@ function CopybookEditor({ config, onConfigChange, selectedTemplateId: propSelect
           ? configData.stroke_order_color 
           : DEFAULT_STROKE_ORDER_COLOR
       )
+      setShowTraceCopy(
+        configData.show_trace_copy !== undefined 
+          ? configData.show_trace_copy 
+          : DEFAULT_SHOW_TRACE_COPY
+      )
       setCurrentPage(0)
       alert('模版已应用')
     }
@@ -273,11 +290,12 @@ function CopybookEditor({ config, onConfigChange, selectedTemplateId: propSelect
       right_grid_color: rightGridColor,
       right_grid_type: rightGridType,
       stroke_order_color: strokeOrderColor,
+      show_trace_copy: showTraceCopy,
     }
     if (onConfigChange) {
       onConfigChange(newConfig)
     }
-  }, [inputText, sceneType, gridType, gridColor, gridSizeCm, linesPerChar, showPinyin, pinyinColor, fontStyle, fontColor, studentName, studentId, className, pageSize, showCharacterPinyin, characterColor, rightGridColor, rightGridType, strokeOrderColor, onConfigChange])
+  }, [inputText, sceneType, gridType, gridColor, gridSizeCm, linesPerChar, showPinyin, pinyinColor, fontStyle, fontColor, studentName, studentId, className, pageSize, showCharacterPinyin, characterColor, rightGridColor, rightGridType, strokeOrderColor, showTraceCopy, onConfigChange])
 
   const hexToRgba = (hex, alpha) => {
     const validHex = /^#[0-9A-Fa-f]{6}$/.test(hex) ? hex : DEFAULT_GRID_COLOR
@@ -683,34 +701,36 @@ function CopybookEditor({ config, onConfigChange, selectedTemplateId: propSelect
       '正': ['横', '竖', '横', '竖', '横'],
       '载': ['横', '竖', '横', '横', '撇折', '撇', '竖', '提', '斜钩', '撇', '点'],
       '极': ['横', '竖', '撇', '点', '撇', '横折折撇', '捺'],
+      '的': ['撇', '竖', '横折', '横', '横', '撇', '横折钩', '点'],
     }
     
-    const strokes = strokesMap[character]
-    if (!strokes || strokes.length === 0) {
-      return defaultText
+    const getStrokeCountFromMap = (char) => {
+      const strokes = strokesMap[char]
+      return strokes ? strokes.length : 0
     }
     
-    const strokeChars = strokes.map(s => STROKE_NAME_TO_CHAR[s] || s)
-    const strokeCount = strokeChars.length
+    const strokeCount = getStrokeCountFromMap(character)
+    
+    if (strokeCount === 0) {
+      const progressiveTexts = ['1', '→', character]
+      return progressiveTexts
+    }
     
     if (strokeCount === 1) {
-      return `笔顺：${character}`
+      return ['1', '→', character]
     }
     
-    const progressiveTexts = []
+    const items = []
     for (let i = 1; i <= strokeCount; i++) {
-      const partialStrokes = strokeChars.slice(0, i)
-      const partialStr = partialStrokes.join('')
-      
-      if (i === strokeCount) {
-        progressiveTexts.push(character)
-      } else {
-        progressiveTexts.push(partialStr)
+      if (i > 1) {
+        items.push('→')
       }
+      items.push(String(i))
     }
+    items.push('→')
+    items.push(character)
     
-    const progressiveStr = progressiveTexts.join(' ')
-    return `笔顺：${progressiveStr}`
+    return items
   }, [])
 
   const drawStrokeOrderRow = useCallback((ctx, x, y, width, height, character, strokeOrderColor) => {
@@ -718,18 +738,109 @@ function CopybookEditor({ config, onConfigChange, selectedTemplateId: propSelect
     ctx.lineWidth = 1
     ctx.strokeRect(x, y, width, height)
     
-    const strokeOrderText = getStrokeOrderText(character)
+    if (!character) return
     
-    const fontSize = Math.max(12, Math.floor(height * 0.5))
+    const items = getStrokeOrderText(character)
+    
+    let fontSize = Math.max(12, Math.floor(height * 0.55))
     ctx.font = `${fontSize}px sans-serif`
-    ctx.textAlign = 'center'
-    ctx.textBaseline = 'middle'
     ctx.fillStyle = strokeOrderColor
+    ctx.textBaseline = 'middle'
     
-    ctx.fillText(strokeOrderText, x + width / 2, y + height / 2)
+    const measureItemWidth = (item) => {
+      return ctx.measureText(item).width
+    }
+    
+    let totalWidth = 0
+    const gap = fontSize * 0.3
+    
+    items.forEach((item) => {
+      totalWidth += measureItemWidth(item)
+    })
+    totalWidth += gap * (items.length - 1)
+    
+    let needWrap = totalWidth > width
+    let rowsNeeded = 1
+    let useSmallerFont = false
+    
+    if (needWrap) {
+      const shrinkRatio = width / totalWidth
+      if (shrinkRatio >= 0.7) {
+        fontSize = Math.floor(fontSize * shrinkRatio)
+        ctx.font = `${fontSize}px sans-serif`
+        needWrap = false
+      } else {
+        rowsNeeded = 2
+        useSmallerFont = true
+        fontSize = Math.floor(fontSize * 0.5)
+      }
+    }
+    
+    if (useSmallerFont) {
+      fontSize = Math.max(8, fontSize)
+      ctx.font = `${fontSize}px sans-serif`
+      
+      totalWidth = 0
+      items.forEach((item) => {
+        totalWidth += measureItemWidth(item)
+      })
+      totalWidth += gap * (items.length - 1)
+      
+      if (totalWidth > width * 2) {
+        const shrinkRatio = (width * 2) / totalWidth
+        if (shrinkRatio < 1.0) {
+          fontSize = Math.max(6, Math.floor(fontSize * shrinkRatio))
+          ctx.font = `${fontSize}px sans-serif`
+        }
+      }
+    }
+    
+    const drawItems = (itemsToDraw, startX, baseY) => {
+      let currentX = startX
+      itemsToDraw.forEach((item) => {
+        const itemWidth = measureItemWidth(item)
+        ctx.textAlign = 'left'
+        ctx.fillText(item, currentX, baseY)
+        currentX += itemWidth + gap
+      })
+    }
+    
+    const calculateTotalWidth = (itemsToDraw) => {
+      let w = 0
+      itemsToDraw.forEach((item) => {
+        w += measureItemWidth(item)
+      })
+      w += gap * (itemsToDraw.length - 1)
+      return w
+    }
+    
+    if (rowsNeeded === 1) {
+      const totalW = calculateTotalWidth(items)
+      const startX = x + (width - totalW) / 2
+      const baseY = y + height / 2
+      drawItems(items, startX, baseY)
+    } else {
+      const mid = Math.floor(items.length / 2)
+      const firstRowItems = items.slice(0, mid)
+      const secondRowItems = items.slice(mid)
+      
+      const firstWidth = calculateTotalWidth(firstRowItems)
+      const secondWidth = calculateTotalWidth(secondRowItems)
+      
+      const rowGap = fontSize * 0.2
+      
+      const firstStartX = x + (width - firstWidth) / 2
+      const secondStartX = x + (width - secondWidth) / 2
+      
+      const firstY = y + height / 3
+      const secondY = y + (height * 2) / 3
+      
+      drawItems(firstRowItems, firstStartX, firstY)
+      drawItems(secondRowItems, secondStartX, secondY)
+    }
   }, [getStrokeOrderText])
 
-  const drawCharacterRow = useCallback((ctx, x, y, rowWidth, character, pinyin, gridColor, fontColor, pinyinColor, rightGridColor, rightGridType, strokeOrderColor, mmToPx, showPinyin = false) => {
+  const drawCharacterRow = useCallback((ctx, x, y, rowWidth, character, pinyin, gridColor, fontColor, pinyinColor, rightGridColor, rightGridType, strokeOrderColor, mmToPx, showPinyin = false, showTraceCopy = false) => {
     const charBoxSize = mmToPx(CHARACTER_SCENE_CONFIG.CHARACTER_BOX_SIZE_MM)
     const gridSize = mmToPx(CHARACTER_SCENE_CONFIG.RIGHT_GRID_SIZE_MM)
     const gap = mmToPx(CHARACTER_SCENE_CONFIG.GAP_SIZE_MM)
@@ -755,6 +866,15 @@ function CopybookEditor({ config, onConfigChange, selectedTemplateId: propSelect
         
         if (gridX + gridSize <= x + rowWidth) {
           drawGrid(ctx, gridX, gridY, gridSize, rightGridType, rightGridColor)
+          
+          if (showTraceCopy && character) {
+            const traceFontSize = Math.floor(gridSize * 0.8)
+            ctx.font = `${traceFontSize}px sans-serif`
+            ctx.fillStyle = hexToRgba(fontColor, DEFAULT_TRACE_COPY_ALPHA)
+            ctx.textAlign = 'center'
+            ctx.textBaseline = 'middle'
+            ctx.fillText(character, gridX + gridSize / 2, gridY + gridSize / 2)
+          }
         }
       }
     }
@@ -1057,7 +1177,8 @@ function CopybookEditor({ config, onConfigChange, selectedTemplateId: propSelect
             rightGridType,
             strokeOrderColor,
             mmToPx,
-            showCharacterPinyin
+            showCharacterPinyin,
+            showTraceCopy
           )
         }
       }
@@ -1233,6 +1354,7 @@ function CopybookEditor({ config, onConfigChange, selectedTemplateId: propSelect
         right_grid_color: rightGridColor,
         right_grid_type: rightGridType,
         stroke_order_color: strokeOrderColor,
+        show_trace_copy: showTraceCopy,
       }
       await exportApi.exportPdf(exportData)
       setShowExportDialog(false)
@@ -1711,6 +1833,49 @@ function CopybookEditor({ config, onConfigChange, selectedTemplateId: propSelect
                   }}
                 />
               </div>
+            </div>
+
+            <h3 className="section-title" style={{ marginTop: '16px' }}>描红配置</h3>
+            <div className="form-group">
+              <div 
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '8px 0',
+                }}
+              >
+                <span style={{ fontSize: '14px', color: '#333' }}>右侧空格子显示描红</span>
+                <div
+                  onClick={() => setShowTraceCopy(!showTraceCopy)}
+                  style={{
+                    width: '50px',
+                    height: '28px',
+                    backgroundColor: showTraceCopy ? '#4CAF50' : '#ccc',
+                    borderRadius: '14px',
+                    position: 'relative',
+                    cursor: 'pointer',
+                    transition: 'background-color 0.3s',
+                  }}
+                >
+                  <div
+                    style={{
+                      width: '22px',
+                      height: '22px',
+                      backgroundColor: 'white',
+                      borderRadius: '50%',
+                      position: 'absolute',
+                      top: '3px',
+                      left: showTraceCopy ? '25px' : '3px',
+                      transition: 'left 0.3s',
+                      boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+                    }}
+                  />
+                </div>
+              </div>
+              <p className="input-hint" style={{ marginTop: '4px', fontSize: '12px', color: '#666' }}>
+                开启后在右侧练习格中显示30%透明度的生字作为描摹参考
+              </p>
             </div>
           </div>
         )}

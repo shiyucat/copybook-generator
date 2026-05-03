@@ -526,6 +526,10 @@ def export_pdf():
             stroke_order_color_hex = '#000000'
         stroke_order_color = hex_to_rgb(stroke_order_color_hex)
         
+        show_trace_copy = data.get('show_trace_copy', False)
+        if not isinstance(show_trace_copy, bool):
+            show_trace_copy = False
+        
         import tempfile
         with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as tmp:
             output_path = tmp.name
@@ -548,7 +552,8 @@ def export_pdf():
                 show_character_pinyin=show_character_pinyin,
                 student_name=student_name,
                 student_id=student_id,
-                class_name=class_name
+                class_name=class_name,
+                show_trace_copy=show_trace_copy
             )
             
             if scene_type == 'character':
@@ -589,6 +594,7 @@ def export_pdf():
                     'right_grid_color': right_grid_color_hex,
                     'right_grid_type': right_grid_type,
                     'stroke_order_color': stroke_order_color_hex,
+                    'show_trace_copy': show_trace_copy,
                     'characters': characters,
                     'input_text': input_text,
                 }
