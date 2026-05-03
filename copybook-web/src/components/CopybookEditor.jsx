@@ -1242,7 +1242,7 @@ function CopybookEditor({ config, onConfigChange, selectedTemplateId: propSelect
     }
 
     ctx.restore()
-  }, [validChars, gridType, gridColor, drawGrid, drawCharacterRow, calculateCharacterSceneLayout, pageSize, studentName, studentId, className, gridSizeCm, linesPerChar, currentPage, pinyinData, showPinyin, fontColor, pinyinColor, calculatePageInfo, sceneType, showCharacterPinyin, characterColor, rightGridColor, rightGridType])
+  }, [validChars, gridType, gridColor, drawGrid, drawCharacterRow, calculateCharacterSceneLayout, pageSize, studentName, studentId, className, gridSizeCm, linesPerChar, currentPage, pinyinData, showPinyin, fontColor, pinyinColor, calculatePageInfo, sceneType, showCharacterPinyin, characterColor, rightGridColor, rightGridType, showTraceCopy, strokeOrderColor])
 
   useEffect(() => {
     if (currentPage >= totalPages && totalPages > 0) {
