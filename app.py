@@ -24,7 +24,7 @@ except ImportError:
     pinyin = None
     Style = None
 
-from database import TemplateDatabase, Template, ExportHistory
+from database import TemplateDatabase, Template, ExportHistory, Student, Assignment
 from copybook_generator import (
     CopybookGenerator, 
     PAGE_SIZES, 
@@ -988,6 +988,806 @@ def health_check():
     })
 
 
+@app.route('/api/students', methods=['GET'])
+def get_students():
+    """
+    获取学生列表（支持分页和搜索）
+    
+    Query Parameters:
+        page: 页码（从1开始，可选，不传则返回所有）
+        page_size: 每页数量（可选，默认10）
+        keyword: 搜索关键字（可选，用于姓名、学号、班级的模糊匹配）
+    
+    Returns:
+        JSON 格式的学生列表
+    """
+    try:
+        page = request.args.get('page', type=int)
+        page_size = request.args.get('page_size', 10, type=int)
+        keyword = request.args.get('keyword', '', type=str).strip()
+        
+        if page is not None and page > 0:
+            page_size = max(10, min(100, page_size))
+            if page_size not in [10, 20, 40, 100]:
+                page_size = 10
+            
+            if keyword:
+                paginated = db.search_students_paginated(
+                    keyword=keyword,
+                    page=page, 
+                    page_size=page_size
+                )
+            else:
+                paginated = db.get_students_paginated(page=page, page_size=page_size)
+            
+            result = []
+            for student in paginated['students']:
+                result.append({
+                    'student_id': student.student_id,
+                    'name': student.name,
+                    'student_no': student.student_no,
+                    'class_name': student.class_name,
+                    'created_at': student.created_at,
+                    'updated_at': student.updated_at
+                })
+            
+            return jsonify({
+                'success': True,
+                'data': result,
+                'count': len(result),
+                'pagination': {
+                    'page': paginated['page'],
+                    'page_size': paginated['page_size'],
+                    'total': paginated['total'],
+                    'total_pages': paginated['total_pages']
+                }
+            })
+        else:
+            students = db.get_all_students()
+            
+            result = []
+            for student in students:
+                result.append({
+                    'student_id': student.student_id,
+                    'name': student.name,
+                    'student_no': student.student_no,
+                    'class_name': student.class_name,
+                    'created_at': student.created_at,
+                    'updated_at': student.updated_at
+                })
+            
+            return jsonify({
+                'success': True,
+                'data': result,
+                'count': len(result)
+            })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/students/<int:student_id>', methods=['GET'])
+def get_student(student_id):
+    """
+    根据 ID 获取单个学生
+    
+    Args:
+        student_id: 学生 ID
+        
+    Returns:
+        JSON 格式的学生数据
+    """
+    try:
+        student = db.get_student_by_id(student_id)
+        
+        if student is None:
+            return jsonify({
+                'success': False,
+                'error': '学生不存在'
+            }), 404
+        
+        result = {
+            'student_id': student.student_id,
+            'name': student.name,
+            'student_no': student.student_no,
+            'class_name': student.class_name,
+            'created_at': student.created_at,
+            'updated_at': student.updated_at
+        }
+        
+        return jsonify({
+            'success': True,
+            'data': result
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/students/by-no/<student_no>', methods=['GET'])
+def get_student_by_no(student_no):
+    """
+    根据学号获取学生
+    
+    Args:
+        student_no: 学号
+        
+    Returns:
+        JSON 格式的学生数据
+    """
+    try:
+        student_no_decoded = urllib.parse.unquote(student_no)
+        student = db.get_student_by_no(student_no_decoded)
+        
+        if student is None:
+            return jsonify({
+                'success': False,
+                'error': '学生不存在'
+            }), 404
+        
+        result = {
+            'student_id': student.student_id,
+            'name': student.name,
+            'student_no': student.student_no,
+            'class_name': student.class_name,
+            'created_at': student.created_at,
+            'updated_at': student.updated_at
+        }
+        
+        return jsonify({
+            'success': True,
+            'data': result
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/students', methods=['POST'])
+def create_student():
+    """
+    创建或更新学生
+    
+    Request Body:
+        {
+            "student_id": null,  // 可选，存在则更新
+            "name": "学生姓名",
+            "student_no": "学号",
+            "class_name": "班级"
+        }
+        
+    Returns:
+        创建结果
+    """
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({
+                'success': False,
+                'error': '请求数据为空'
+            }), 400
+        
+        name = data.get('name', '').strip()
+        student_no = data.get('student_no', '').strip()
+        class_name = data.get('class_name', '').strip()
+        student_id = data.get('student_id')
+        
+        if not name:
+            return jsonify({
+                'success': False,
+                'error': '学生姓名不能为空'
+            }), 400
+        
+        if not student_no:
+            return jsonify({
+                'success': False,
+                'error': '学号不能为空'
+            }), 400
+        
+        existing = None
+        if student_id is not None:
+            existing = db.get_student_by_id(student_id)
+        
+        student = Student(
+            student_id=student_id,
+            name=name,
+            student_no=student_no,
+            class_name=class_name
+        )
+        
+        try:
+            new_student_id = db.save_student(student)
+        except sqlite3.IntegrityError:
+            return jsonify({
+                'success': False,
+                'error': '学号已存在'
+            }), 400
+        
+        if existing:
+            message = f'已更新学生: {name}'
+        else:
+            message = f'已创建学生: {name}'
+        
+        return jsonify({
+            'success': True,
+            'message': message,
+            'student_id': new_student_id,
+            'is_update': existing is not None
+        }), 201 if not existing else 200
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/students/<int:student_id>', methods=['PUT'])
+def update_student(student_id):
+    """
+    更新指定 ID 的学生
+    
+    Args:
+        student_id: 学生 ID
+        
+    Request Body:
+        {
+            "name": "新的姓名（可选）",
+            "student_no": "新的学号（可选）",
+            "class_name": "新的班级（可选）"
+        }
+        
+    Returns:
+        更新结果
+    """
+    try:
+        existing = db.get_student_by_id(student_id)
+        
+        if existing is None:
+            return jsonify({
+                'success': False,
+                'error': '学生不存在'
+            }), 404
+        
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({
+                'success': False,
+                'error': '请求数据为空'
+            }), 400
+        
+        name = data.get('name', existing.name).strip()
+        student_no = data.get('student_no', existing.student_no).strip()
+        class_name = data.get('class_name', existing.class_name).strip()
+        
+        if not name:
+            return jsonify({
+                'success': False,
+                'error': '学生姓名不能为空'
+            }), 400
+        
+        if not student_no:
+            return jsonify({
+                'success': False,
+                'error': '学号不能为空'
+            }), 400
+        
+        if student_no != existing.student_no:
+            no_exists = db.get_student_by_no(student_no)
+            if no_exists and no_exists.student_id != student_id:
+                return jsonify({
+                    'success': False,
+                    'error': '学号已存在'
+                }), 400
+        
+        student = Student(
+            student_id=student_id,
+            name=name,
+            student_no=student_no,
+            class_name=class_name,
+            created_at=existing.created_at
+        )
+        
+        new_id = db.save_student(student)
+        
+        return jsonify({
+            'success': True,
+            'message': f'已更新学生: {name}',
+            'student_id': new_id
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/students/<int:student_id>', methods=['DELETE'])
+def delete_student(student_id):
+    """
+    删除指定 ID 的学生
+    
+    Args:
+        student_id: 学生 ID
+        
+    Returns:
+        删除结果
+    """
+    try:
+        student = db.get_student_by_id(student_id)
+        
+        if student is None:
+            return jsonify({
+                'success': False,
+                'error': '学生不存在'
+            }), 404
+        
+        success = db.delete_student(student_id)
+        
+        if success:
+            return jsonify({
+                'success': True,
+                'message': f'已删除学生: {student.name}'
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': '删除失败'
+            }), 500
+            
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/students/check-no/<student_no>', methods=['GET'])
+def check_student_no(student_no):
+    """
+    检查学号是否已存在
+    
+    Args:
+        student_no: 学号
+        
+    Returns:
+        学号是否存在
+    """
+    try:
+        student_no_decoded = urllib.parse.unquote(student_no)
+        exists = db.get_student_by_no(student_no_decoded) is not None
+        
+        return jsonify({
+            'success': True,
+            'exists': exists
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/students/count', methods=['GET'])
+def get_student_count():
+    """
+    获取学生总数
+    
+    Returns:
+        学生数量
+    """
+    try:
+        count = db.get_student_count()
+        
+        return jsonify({
+            'success': True,
+            'count': count
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/assignments', methods=['GET'])
+def get_assignments():
+    """
+    获取作业列表（支持分页和过滤）
+    
+    Query Parameters:
+        page: 页码（从1开始）
+        page_size: 每页数量（可选，默认10）
+        student_no: 学号过滤（可选）
+        status: 状态过滤（可选，pending 或 completed）
+    
+    Returns:
+        JSON 格式的作业列表
+    """
+    try:
+        page = request.args.get('page', 1, type=int)
+        page_size = request.args.get('page_size', 10, type=int)
+        student_no = request.args.get('student_no', type=str)
+        status = request.args.get('status', type=str)
+        
+        page = max(1, page)
+        page_size = max(10, min(100, page_size))
+        
+        paginated = db.get_assignments_paginated(
+            student_no=student_no,
+            status=status,
+            page=page,
+            page_size=page_size
+        )
+        
+        result = []
+        for assignment in paginated['assignments']:
+            result.append({
+                'assignment_id': assignment.assignment_id,
+                'student_no': assignment.student_no,
+                'template_id': assignment.template_id,
+                'characters': assignment.characters,
+                'scene_type': assignment.scene_type,
+                'status': assignment.status,
+                'assigned_at': assignment.assigned_at,
+                'completed_at': assignment.completed_at,
+                'config_data': assignment.config_data,
+                'created_at': assignment.created_at,
+                'updated_at': assignment.updated_at
+            })
+        
+        return jsonify({
+            'success': True,
+            'data': result,
+            'count': len(result),
+            'pagination': {
+                'page': paginated['page'],
+                'page_size': paginated['page_size'],
+                'total': paginated['total'],
+                'total_pages': paginated['total_pages']
+            }
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/assignments/<int:assignment_id>', methods=['GET'])
+def get_assignment(assignment_id):
+    """
+    根据 ID 获取单个作业
+    
+    Args:
+        assignment_id: 作业 ID
+        
+    Returns:
+        JSON 格式的作业数据
+    """
+    try:
+        assignment = db.get_assignment_by_id(assignment_id)
+        
+        if assignment is None:
+            return jsonify({
+                'success': False,
+                'error': '作业不存在'
+            }), 404
+        
+        result = {
+            'assignment_id': assignment.assignment_id,
+            'student_no': assignment.student_no,
+            'template_id': assignment.template_id,
+            'characters': assignment.characters,
+            'scene_type': assignment.scene_type,
+            'status': assignment.status,
+            'assigned_at': assignment.assigned_at,
+            'completed_at': assignment.completed_at,
+            'config_data': assignment.config_data,
+            'created_at': assignment.created_at,
+            'updated_at': assignment.updated_at
+        }
+        
+        return jsonify({
+            'success': True,
+            'data': result
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/assignments', methods=['POST'])
+def create_assignment():
+    """
+    创建作业（布置作业）
+    
+    Request Body:
+        {
+            "student_no": "学号",
+            "template_id": 1,  // 可选，模版ID
+            "characters": "需要练习的字",
+            "scene_type": "normal",  // normal 或 character
+            "config_data": {}  // 可选，模版配置数据
+        }
+        
+    Returns:
+        创建结果
+    """
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({
+                'success': False,
+                'error': '请求数据为空'
+            }), 400
+        
+        student_no = data.get('student_no', '').strip()
+        template_id = data.get('template_id')
+        characters = data.get('characters', '').strip()
+        scene_type = data.get('scene_type', 'normal')
+        config_data = data.get('config_data', {})
+        
+        if not student_no:
+            return jsonify({
+                'success': False,
+                'error': '学号不能为空'
+            }), 400
+        
+        if not characters:
+            return jsonify({
+                'success': False,
+                'error': '练习文字不能为空'
+            }), 400
+        
+        student = db.get_student_by_no(student_no)
+        if student is None:
+            return jsonify({
+                'success': False,
+                'error': '学生不存在'
+            }), 404
+        
+        if template_id is not None:
+            template = db.get_template_by_id(template_id)
+            if template is None:
+                return jsonify({
+                    'success': False,
+                    'error': '模版不存在'
+                }), 404
+        
+        assignment = Assignment(
+            student_no=student_no,
+            template_id=template_id,
+            characters=characters,
+            scene_type=scene_type,
+            status=Assignment.STATUS_PENDING,
+            config_data=config_data
+        )
+        
+        assignment_id = db.save_assignment(assignment)
+        
+        return jsonify({
+            'success': True,
+            'message': f'已布置作业给学生: {student.name}',
+            'assignment_id': assignment_id
+        }), 201
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/assignments/<int:assignment_id>', methods=['PUT'])
+def update_assignment(assignment_id):
+    """
+    更新作业
+    
+    Args:
+        assignment_id: 作业 ID
+        
+    Request Body:
+        {
+            "student_no": "学号（可选）",
+            "template_id": 1,  // 可选
+            "characters": "需要练习的字（可选）",
+            "scene_type": "normal",  // 可选
+            "status": "pending",  // 可选
+            "config_data": {}  // 可选
+        }
+        
+    Returns:
+        更新结果
+    """
+    try:
+        existing = db.get_assignment_by_id(assignment_id)
+        
+        if existing is None:
+            return jsonify({
+                'success': False,
+                'error': '作业不存在'
+            }), 404
+        
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({
+                'success': False,
+                'error': '请求数据为空'
+            }), 400
+        
+        student_no = data.get('student_no', existing.student_no).strip()
+        template_id = data.get('template_id', existing.template_id)
+        characters = data.get('characters', existing.characters).strip()
+        scene_type = data.get('scene_type', existing.scene_type)
+        status = data.get('status', existing.status)
+        config_data = data.get('config_data', existing.config_data)
+        
+        if student_no != existing.student_no:
+            student = db.get_student_by_no(student_no)
+            if student is None:
+                return jsonify({
+                    'success': False,
+                    'error': '学生不存在'
+                }), 404
+        
+        if template_id is not None and template_id != existing.template_id:
+            template = db.get_template_by_id(template_id)
+            if template is None:
+                return jsonify({
+                    'success': False,
+                    'error': '模版不存在'
+                }), 404
+        
+        assignment = Assignment(
+            assignment_id=assignment_id,
+            student_no=student_no,
+            template_id=template_id,
+            characters=characters,
+            scene_type=scene_type,
+            status=status,
+            assigned_at=existing.assigned_at,
+            completed_at=existing.completed_at,
+            config_data=config_data
+        )
+        
+        new_id = db.save_assignment(assignment)
+        
+        return jsonify({
+            'success': True,
+            'message': '已更新作业',
+            'assignment_id': new_id
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/assignments/<int:assignment_id>/complete', methods=['POST'])
+def complete_assignment(assignment_id):
+    """
+    标记作业为已完成
+    
+    Args:
+        assignment_id: 作业 ID
+        
+    Returns:
+        更新结果
+    """
+    try:
+        existing = db.get_assignment_by_id(assignment_id)
+        
+        if existing is None:
+            return jsonify({
+                'success': False,
+                'error': '作业不存在'
+            }), 404
+        
+        success = db.mark_assignment_completed(assignment_id)
+        
+        if success:
+            return jsonify({
+                'success': True,
+                'message': '作业已标记为完成'
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': '更新失败'
+            }), 500
+            
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/assignments/<int:assignment_id>', methods=['DELETE'])
+def delete_assignment(assignment_id):
+    """
+    删除作业
+    
+    Args:
+        assignment_id: 作业 ID
+        
+    Returns:
+        删除结果
+    """
+    try:
+        assignment = db.get_assignment_by_id(assignment_id)
+        
+        if assignment is None:
+            return jsonify({
+                'success': False,
+                'error': '作业不存在'
+            }), 404
+        
+        success = db.delete_assignment(assignment_id)
+        
+        if success:
+            return jsonify({
+                'success': True,
+                'message': '已删除作业'
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': '删除失败'
+            }), 500
+            
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/assignments/count', methods=['GET'])
+def get_assignment_count():
+    """
+    获取作业总数
+    
+    Query Parameters:
+        student_no: 学号过滤（可选）
+        status: 状态过滤（可选）
+    
+    Returns:
+        作业数量
+    """
+    try:
+        student_no = request.args.get('student_no', type=str)
+        status = request.args.get('status', type=str)
+        
+        count = db.get_assignment_count(student_no=student_no, status=status)
+        
+        return jsonify({
+            'success': True,
+            'count': count
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
 @app.errorhandler(404)
 def not_found(error):
     """404 错误处理"""
@@ -1007,6 +1807,7 @@ def internal_error(error):
 
 
 if __name__ == '__main__':
+    import sqlite3
     port = int(os.environ.get('FLASK_PORT', 5000))
     debug = os.environ.get('FLASK_DEBUG', 'True').lower() == 'true'
     
@@ -1021,6 +1822,10 @@ if __name__ == '__main__':
     print(f"  PUT    /api/templates/<id>     更新模版")
     print(f"  DELETE /api/templates/<id>     删除模版")
     print(f"  POST   /api/export/pdf         导出PDF字帖")
+    print(f"  GET    /api/students           获取所有学生")
+    print(f"  POST   /api/students           创建/更新学生")
+    print(f"  GET    /api/assignments        获取作业列表")
+    print(f"  POST   /api/assignments        创建作业")
     print(f"  GET    /api/health             健康检查")
     print(f"=" * 50)
     
