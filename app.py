@@ -32,7 +32,8 @@ from copybook_generator import (
     DEFAULT_PAGE_SIZE,
     DEFAULT_GRID_SIZE_CM,
     DEFAULT_LINES_PER_CHAR,
-    DEFAULT_SHOW_PINYIN
+    DEFAULT_SHOW_PINYIN,
+    WritingVideoGenerator
 )
 
 
@@ -958,6 +959,116 @@ def re_export_from_history(history_id):
             
             response = make_response(pdf_data)
             response.headers['Content-Type'] = 'application/pdf'
+            response.headers['Content-Disposition'] = f"attachment; filename*=UTF-8''{encoded_filename}"
+            
+            return response
+            
+        except Exception as e:
+            if os.path.exists(output_path):
+                os.unlink(output_path)
+            raise e
+            
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/teaching-video/<character>', methods=['GET'])
+def generate_teaching_video(character):
+    """
+    生成汉字书写过程视频
+    
+    Args:
+        character: 汉字字符（URL编码）
+        
+    Query Parameters:
+        format: 视频格式，可选 mp4 或 gif，默认 mp4
+        size: 视频尺寸（像素），默认 512
+        fps: 帧率，默认 30
+        
+    Returns:
+        MP4 视频文件下载
+    """
+    try:
+        import tempfile
+        
+        character = urllib.parse.unquote(character)
+        
+        if not character or len(character) == 0:
+            return jsonify({
+                'success': False,
+                'error': '请提供汉字'
+            }), 400
+        
+        if len(character) > 1:
+            character = character[0]
+        
+        video_format = request.args.get('format', 'mp4').lower()
+        size = request.args.get('size', 512, type=int)
+        fps = request.args.get('fps', 30, type=int)
+        
+        stroke_color_hex = request.args.get('stroke_color', '#000000')
+        grid_color_hex = request.args.get('grid_color', '#C8C8C8')
+        bg_color_hex = request.args.get('bg_color', '#FFFFFF')
+        
+        def hex_to_rgb_tuple(hex_color):
+            hex_color = hex_color.lstrip('#')
+            if len(hex_color) == 6:
+                return (
+                    int(hex_color[0:2], 16),
+                    int(hex_color[2:4], 16),
+                    int(hex_color[4:6], 16)
+                )
+            return (0, 0, 0)
+        
+        stroke_color = hex_to_rgb_tuple(stroke_color_hex)
+        grid_color = hex_to_rgb_tuple(grid_color_hex)
+        bg_color = hex_to_rgb_tuple(bg_color_hex)
+        
+        generator = WritingVideoGenerator(
+            video_size=size,
+            fps=fps,
+            bg_color=bg_color,
+            stroke_color=stroke_color,
+            grid_color=grid_color
+        )
+        
+        suffix = f'.{video_format}' if video_format in ['mp4', 'gif'] else '.mp4'
+        
+        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+            output_path = tmp.name
+        
+        try:
+            if video_format == 'gif':
+                success, message = generator.generate_gif(character, output_path)
+            else:
+                success, message = generator.generate_video(character, output_path)
+            
+            if not success:
+                if os.path.exists(output_path):
+                    os.unlink(output_path)
+                return jsonify({
+                    'success': False,
+                    'error': message
+                }), 500
+            
+            with open(output_path, 'rb') as f:
+                video_data = f.read()
+            
+            os.unlink(output_path)
+            
+            filename = f"{character}_书写示范.{video_format}"
+            encoded_filename = urllib.parse.quote(filename)
+            
+            response = make_response(video_data)
+            
+            if video_format == 'gif':
+                response.headers['Content-Type'] = 'image/gif'
+            else:
+                response.headers['Content-Type'] = 'video/mp4'
+            
             response.headers['Content-Disposition'] = f"attachment; filename*=UTF-8''{encoded_filename}"
             
             return response

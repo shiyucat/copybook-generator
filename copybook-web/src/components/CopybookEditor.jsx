@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react'
-import templateApi, { exportApi, pinyinApi } from '../services/api'
+import templateApi, { exportApi, pinyinApi, teachingVideoApi } from '../services/api'
 
 const GridType = {
   TIANZI: '田字格',
@@ -133,8 +133,29 @@ function CopybookEditor({ config, onConfigChange, selectedTemplateId: propSelect
       ? safeConfig.show_trace_copy 
       : DEFAULT_SHOW_TRACE_COPY
   )
+  const [generatingVideoChar, setGeneratingVideoChar] = useState(null)
 
   const gridSize = 60
+
+  const handleGenerateTeachingVideo = useCallback(async (character) => {
+    if (!character || generatingVideoChar) return
+    
+    setGeneratingVideoChar(character)
+    try {
+      await teachingVideoApi.generateVideo(character, {
+        format: 'mp4',
+        size: 512,
+        fps: 30,
+        strokeColor: fontColor,
+        gridColor: gridColor,
+      })
+      alert(`已生成「${character}」的书写示范视频`)
+    } catch (err) {
+      alert(`生成视频失败: ${err.message}`)
+    } finally {
+      setGeneratingVideoChar(null)
+    }
+  }, [generatingVideoChar, fontColor, gridColor])
 
   const fetchTemplates = useCallback(async () => {
     setLoadingTemplates(true)
@@ -1443,6 +1464,59 @@ function CopybookEditor({ config, onConfigChange, selectedTemplateId: propSelect
               <br />
               仅支持：中文、英文、数字
             </p>
+          )}
+          
+          {validChars.length > 0 && (
+            <div style={{ marginTop: '12px' }}>
+              <p style={{ fontSize: '12px', color: '#666', marginBottom: '8px' }}>
+                教我写：点击按钮生成该字的书写过程示范视频
+              </p>
+              <div style={{ 
+                display: 'flex', 
+                flexWrap: 'wrap', 
+                gap: '8px',
+                alignItems: 'center'
+              }}>
+                {validChars.map((char, index) => (
+                  <div
+                    key={index}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      backgroundColor: '#f5f5f5',
+                      borderRadius: '4px',
+                      padding: '4px 8px',
+                      gap: '6px',
+                    }}
+                  >
+                    <span style={{ 
+                      fontSize: '18px', 
+                      fontWeight: 'bold',
+                      minWidth: '24px',
+                      textAlign: 'center'
+                    }}>
+                      {char}
+                    </span>
+                    <button
+                      onClick={() => handleGenerateTeachingVideo(char)}
+                      disabled={generatingVideoChar === char}
+                      style={{
+                        fontSize: '11px',
+                        padding: '3px 8px',
+                        backgroundColor: generatingVideoChar === char ? '#ccc' : '#4CAF50',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '3px',
+                        cursor: generatingVideoChar === char ? 'not-allowed' : 'pointer',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {generatingVideoChar === char ? '生成中...' : '教我写'}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
           )}
         </div>
 
