@@ -1360,6 +1360,16 @@ class HanziDataLoader:
     """汉字数据加载器"""
     
     HANZI_WRITER_DATA_URL = "https://cdn.jsdelivr.net/npm/hanzi-writer-data@latest/{char}.json"
+    HANZI_WRITER_DATA_URL_HTTP = "http://cdn.jsdelivr.net/npm/hanzi-writer-data@latest/{char}.json"
+    
+    @classmethod
+    def _create_ssl_context(cls):
+        """创建 SSL 上下文（忽略证书验证，解决本地环境问题）"""
+        import ssl
+        ctx = ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+        return ctx
     
     @classmethod
     def load_character_data(cls, character: str) -> Optional[Dict[str, Any]]:
@@ -1372,16 +1382,26 @@ class HanziDataLoader:
         Returns:
             汉字数据字典，包含 strokes, medians, radStrokes 字段
         """
+        import ssl
+        
         encoded_char = urllib.parse.quote(character)
         url = cls.HANZI_WRITER_DATA_URL.format(char=encoded_char)
+        url_http = cls.HANZI_WRITER_DATA_URL_HTTP.format(char=encoded_char)
         
         try:
-            with urllib.request.urlopen(url, timeout=10) as response:
+            ctx = cls._create_ssl_context()
+            with urllib.request.urlopen(url, timeout=10, context=ctx) as response:
                 data = json.loads(response.read().decode('utf-8'))
                 return data
-        except (urllib.error.URLError, json.JSONDecodeError) as e:
-            print(f"加载汉字数据失败: {e}")
-            return None
+        except (urllib.error.URLError, json.JSONDecodeError, ssl.SSLError) as e:
+            try:
+                with urllib.request.urlopen(url_http, timeout=10) as response:
+                    data = json.loads(response.read().decode('utf-8'))
+                    return data
+            except Exception as e2:
+                print(f"加载汉字数据失败 (HTTPS): {e}")
+                print(f"加载汉字数据失败 (HTTP): {e2}")
+                return None
     
     @classmethod
     def load_character_data_from_file(cls, character: str, 
