@@ -306,6 +306,47 @@ export const studentApi = {
   },
 }
 
+export const teachingVideoApi = {
+  async generateVideo(character, options = {}) {
+    const { format = 'mp4', size = 512, fps = 30, strokeColor, gridColor, bgColor } = options
+    
+    let url = `${API_BASE}/teaching-video/${encodeURIComponent(character)}?format=${format}&size=${size}&fps=${fps}`
+    
+    if (strokeColor) url += `&stroke_color=${encodeURIComponent(strokeColor)}`
+    if (gridColor) url += `&grid_color=${encodeURIComponent(gridColor)}`
+    if (bgColor) url += `&bg_color=${encodeURIComponent(bgColor)}`
+    
+    const response = await fetch(url)
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}))
+      throw new Error(errorData.error || '生成视频失败')
+    }
+    
+    const blob = await response.blob()
+    const contentDisposition = response.headers.get('Content-Disposition')
+    let filename = `${character}_书写示范.${format}`
+    
+    if (contentDisposition) {
+      const match = contentDisposition.match(/filename\*=UTF-8''(.+)/)
+      if (match) {
+        filename = decodeURIComponent(match[1])
+      }
+    }
+    
+    const urlObj = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = urlObj
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    window.URL.revokeObjectURL(urlObj)
+    
+    return { success: true, filename }
+  },
+}
+
 export const assignmentApi = {
   async getPaginated(page = 1, pageSize = 10, studentNo = null, status = null) {
     let url = `${API_BASE}/assignments?page=${page}&page_size=${pageSize}`

@@ -4,3 +4,4 @@ hanzi-writer-data
 Flask
 flask-cors
 pypinyin
+opencv-python

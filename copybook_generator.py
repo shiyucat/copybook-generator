@@ -3708,6 +3708,301 @@ class CopybookGenerator:
             return False, f"生成字帖时发生错误：{str(e)}"
 
 
+class WritingVideoGenerator:
+    """书写视频生成器 - 生成汉字书写过程动画视频"""
+    
+    DEFAULT_VIDEO_SIZE = 512
+    DEFAULT_FPS = 30
+    DEFAULT_STROKE_DURATION = 60
+    DEFAULT_PAUSE_DURATION = 15
+    
+    def __init__(self, 
+                 video_size: int = DEFAULT_VIDEO_SIZE,
+                 fps: int = DEFAULT_FPS,
+                 stroke_duration: int = DEFAULT_STROKE_DURATION,
+                 pause_duration: int = DEFAULT_PAUSE_DURATION,
+                 bg_color: Tuple[int, int, int] = (255, 255, 255),
+                 stroke_color: Tuple[int, int, int] = (0, 0, 0),
+                 grid_color: Tuple[int, int, int] = (200, 200, 200),
+                 stroke_width: int = 8):
+        """
+        初始化书写视频生成器
+        
+        Args:
+            video_size: 视频尺寸（正方形，像素）
+            fps: 帧率
+            stroke_duration: 每笔书写的帧数
+            pause_duration: 每笔写完后的暂停帧数
+            bg_color: 背景颜色 (R, G, B)
+            stroke_color: 笔画颜色 (R, G, B)
+            grid_color: 田字格颜色 (R, G, B)
+            stroke_width: 笔画宽度
+        """
+        self.video_size = video_size
+        self.fps = fps
+        self.stroke_duration = stroke_duration
+        self.pause_duration = pause_duration
+        self.bg_color = bg_color
+        self.stroke_color = stroke_color
+        self.grid_color = grid_color
+        self.stroke_width = stroke_width
+        self.hanzi_writer_cache = {}
+    
+    def _get_hanzi_writer_data(self, character: str) -> Optional[Dict[str, Any]]:
+        """获取汉字笔画数据"""
+        if character in self.hanzi_writer_cache:
+            return self.hanzi_writer_cache[character]
+        
+        data = HanziDataLoader.load_character_data_from_file(character)
+        if data is None:
+            data = HanziDataLoader.load_character_data(character)
+        
+        if data is not None:
+            self.hanzi_writer_cache[character] = data
+        
+        return data
+    
+    def _transform_medians_to_video(self, medians: List[List[float]]) -> List[Tuple[float, float]]:
+        """
+        将 hanzi-writer 的坐标转换为视频坐标
+        
+        hanzi-writer 坐标范围 0-1024，转换到视频坐标范围
+        保留边距，让汉字居中显示
+        """
+        HANZI_WRITER_MAX = 1024.0
+        margin = self.video_size * 0.1
+        usable_size = self.video_size - 2 * margin
+        
+        transformed = []
+        for point in medians:
+            x = point[0]
+            y = point[1]
+            
+            normalized_x = x / HANZI_WRITER_MAX
+            normalized_y = y / HANZI_WRITER_MAX
+            
+            video_x = margin + normalized_x * usable_size
+            video_y = margin + normalized_y * usable_size
+            
+            transformed.append((video_x, video_y))
+        
+        return transformed
+    
+    def _interpolate_stroke(self, points: List[Tuple[float, float]], num_frames: int) -> List[Tuple[float, float]]:
+        """
+        在笔画点之间进行插值，生成平滑的动画路径
+        
+        Args:
+            points: 原始笔画点列表
+            num_frames: 需要的帧数
+            
+        Returns:
+            插值后的点列表
+        """
+        if len(points) < 2:
+            return points * num_frames
+        
+        total_length = 0.0
+        segment_lengths = []
+        
+        for i in range(len(points) - 1):
+            dx = points[i + 1][0] - points[i][0]
+            dy = points[i + 1][1] - points[i][1]
+            length = math.sqrt(dx * dx + dy * dy)
+            segment_lengths.append(length)
+            total_length += length
+        
+        if total_length < 1e-10:
+            return [points[-1]] * num_frames
+        
+        interpolated = []
+        distance_per_frame = total_length / num_frames
+        
+        current_segment = 0
+        current_distance_in_segment = 0.0
+        
+        for frame in range(num_frames):
+            target_distance = frame * distance_per_frame
+            
+            while (current_segment < len(segment_lengths) and 
+                   current_distance_in_segment + segment_lengths[current_segment] < target_distance):
+                current_distance_in_segment += segment_lengths[current_segment]
+                current_segment += 1
+            
+            if current_segment >= len(segment_lengths):
+                interpolated.append(points[-1])
+                continue
+            
+            segment_start = points[current_segment]
+            segment_end = points[current_segment + 1]
+            segment_length = segment_lengths[current_segment]
+            
+            ratio = (target_distance - current_distance_in_segment) / segment_length if segment_length > 0 else 0.0
+            ratio = max(0.0, min(1.0, ratio))
+            
+            x = segment_start[0] + (segment_end[0] - segment_start[0]) * ratio
+            y = segment_start[1] + (segment_end[1] - segment_start[1]) * ratio
+            
+            interpolated.append((x, y))
+        
+        return interpolated
+    
+    def _draw_grid(self, draw: ImageDraw.Draw):
+        """绘制田字格"""
+        size = self.video_size
+        margin = size * 0.1
+        
+        draw.rectangle([margin, margin, size - margin, size - margin], 
+                       outline=self.grid_color, width=2)
+        
+        mid = size / 2
+        draw.line([margin, mid, size - margin, mid], fill=self.grid_color, width=1)
+        draw.line([mid, margin, mid, size - margin], fill=self.grid_color, width=1)
+        
+        draw.line([margin, margin, size - margin, size - margin], fill=self.grid_color, width=1)
+        draw.line([size - margin, margin, margin, size - margin], fill=self.grid_color, width=1)
+    
+    def _create_blank_frame(self) -> Image.Image:
+        """创建空白帧（带田字格）"""
+        img = Image.new('RGB', (self.video_size, self.video_size), self.bg_color)
+        draw = ImageDraw.Draw(img)
+        self._draw_grid(draw)
+        return img
+    
+    def generate_video_frames(self, character: str) -> Tuple[List[Image.Image], int]:
+        """
+        生成书写过程的所有帧
+        
+        Args:
+            character: 汉字字符
+            
+        Returns:
+            (帧列表, 总帧数)
+        """
+        hanzi_data = self._get_hanzi_writer_data(character)
+        
+        if hanzi_data is None:
+            return [], 0
+        
+        medians = hanzi_data.get('medians', [])
+        if not medians:
+            return [], 0
+        
+        frames = []
+        
+        current_strokes_drawn = []
+        
+        for stroke_idx, median in enumerate(medians):
+            transformed_points = self._transform_medians_to_video(median)
+            
+            interpolated = self._interpolate_stroke(transformed_points, self.stroke_duration)
+            
+            for point_idx, point in enumerate(interpolated):
+                img = self._create_blank_frame()
+                draw = ImageDraw.Draw(img)
+                
+                for prev_stroke in current_strokes_drawn:
+                    if len(prev_stroke) >= 2:
+                        draw.line(prev_stroke, fill=self.stroke_color, width=self.stroke_width, joint='curve')
+                
+                if point_idx > 0:
+                    current_path = interpolated[:point_idx + 1]
+                    if len(current_path) >= 2:
+                        draw.line(current_path, fill=self.stroke_color, width=self.stroke_width, joint='curve')
+                
+                frames.append(img)
+            
+            current_strokes_drawn.append(interpolated)
+            
+            for _ in range(self.pause_duration):
+                img = self._create_blank_frame()
+                draw = ImageDraw.Draw(img)
+                
+                for stroke in current_strokes_drawn:
+                    if len(stroke) >= 2:
+                        draw.line(stroke, fill=self.stroke_color, width=self.stroke_width, joint='curve')
+                
+                frames.append(img)
+        
+        for _ in range(self.fps * 2):
+            img = self._create_blank_frame()
+            draw = ImageDraw.Draw(img)
+            
+            for stroke in current_strokes_drawn:
+                if len(stroke) >= 2:
+                    draw.line(stroke, fill=self.stroke_color, width=self.stroke_width, joint='curve')
+            
+            frames.append(img)
+        
+        return frames, len(frames)
+    
+    def generate_video(self, character: str, output_path: str) -> Tuple[bool, str]:
+        """
+        生成书写过程视频
+        
+        Args:
+            character: 汉字字符
+            output_path: 输出视频路径 (.mp4)
+            
+        Returns:
+            (是否成功, 错误信息)
+        """
+        try:
+            import cv2
+            import numpy as np
+        except ImportError:
+            return False, "请安装 opencv-python: pip install opencv-python"
+        
+        frames, total_frames = self.generate_video_frames(character)
+        
+        if total_frames == 0:
+            return False, f"无法获取汉字 '{character}' 的笔画数据"
+        
+        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+        video_writer = cv2.VideoWriter(
+            output_path, 
+            fourcc, 
+            self.fps, 
+            (self.video_size, self.video_size)
+        )
+        
+        for pil_img in frames:
+            cv_img = cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
+            video_writer.write(cv_img)
+        
+        video_writer.release()
+        
+        return True, f"视频已成功生成: {output_path}"
+    
+    def generate_gif(self, character: str, output_path: str) -> Tuple[bool, str]:
+        """
+        生成书写过程 GIF 动画
+        
+        Args:
+            character: 汉字字符
+            output_path: 输出 GIF 路径
+            
+        Returns:
+            (是否成功, 错误信息)
+        """
+        frames, total_frames = self.generate_video_frames(character)
+        
+        if total_frames == 0:
+            return False, f"无法获取汉字 '{character}' 的笔画数据"
+        
+        duration = int(1000 / self.fps)
+        
+        frames[0].save(
+            output_path,
+            save_all=True,
+            append_images=frames[1:],
+            duration=duration,
+            loop=0
+        )
+        
+        return True, f"GIF 已成功生成: {output_path}"
+
+
 def main():
     """主函数"""
     import argparse
