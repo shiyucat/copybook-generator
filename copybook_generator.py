@@ -3088,7 +3088,8 @@ class CopybookGenerator:
         获取笔顺展示文本
         
         格式："笔顺：xxxx"
-        例如"人"字："笔顺：丿㇏"（显示所有笔画字符）
+        例如"三"字："笔顺：一 二 三"（逐步书写，每次多写一笔）
+        例如"人"字："笔顺：丿 人"（逐步书写，每次多写一笔）
         
         Args:
             character: 汉字字符
@@ -3101,9 +3102,25 @@ class CopybookGenerator:
         if not stroke_chars:
             return f"笔顺：{character}"
         
-        strokes_str = ''.join(stroke_chars)
+        stroke_count = len(stroke_chars)
         
-        return f"笔顺：{strokes_str}"
+        if stroke_count == 1:
+            return f"笔顺：{character}"
+        
+        progressive_texts = []
+        
+        for i in range(1, stroke_count + 1):
+            partial_strokes = stroke_chars[:i]
+            partial_str = ''.join(partial_strokes)
+            
+            if i == stroke_count:
+                progressive_texts.append(character)
+            else:
+                progressive_texts.append(partial_str)
+        
+        progressive_str = ' '.join(progressive_texts)
+        
+        return f"笔顺：{progressive_str}"
     
     def _get_progressive_stroke_texts(self, character: str) -> List[str]:
         """
