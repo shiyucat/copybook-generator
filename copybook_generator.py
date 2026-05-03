@@ -3191,18 +3191,16 @@ class CopybookGenerator:
         获取逐步书写的项目列表
         
         例如"人"字（2笔）：
-        - 第1项：{"type": "stroke", "text": "1", "is_written": True}
+        - 第1项：{"type": "stroke", "text": "丿", "is_written": True}
         - 第2项：{"type": "arrow", "text": "→"}
         - 第3项：{"type": "char", "text": "人", "is_written": True}
         
         例如"三"字（3笔）：
-        - 第1项：{"type": "stroke", "text": "1", "is_written": True}
+        - 第1项：{"type": "stroke", "text": "一", "is_written": True}
         - 第2项：{"type": "arrow", "text": "→"}
-        - 第3项：{"type": "stroke", "text": "2", "is_written": True}
+        - 第3项：{"type": "stroke", "text": "二", "is_written": True}
         - 第4项：{"type": "arrow", "text": "→"}
-        - 第5项：{"type": "stroke", "text": "3", "is_written": True}
-        - 第6项：{"type": "arrow", "text": "→"}
-        - 第7项：{"type": "char", "text": "三", "is_written": True}
+        - 第5项：{"type": "char", "text": "三", "is_written": True}
         
         Args:
             character: 汉字字符
@@ -3210,20 +3208,52 @@ class CopybookGenerator:
         Returns:
             List[Dict]: 项目列表
         """
-        stroke_count = self._get_stroke_count(character)
+        stroke_names = self._get_stroke_names(character)
+        stroke_count = len(stroke_names)
         
         if stroke_count == 0:
-            return [{"type": "char", "text": character, "is_written": True}]
+            hanzi_stroke_count = self._get_stroke_count(character)
+            if hanzi_stroke_count == 0:
+                return [{"type": "char", "text": character, "is_written": True}]
+            
+            items = []
+            for i in range(1, hanzi_stroke_count + 1):
+                if i > 1:
+                    items.append({"type": "arrow", "text": "→"})
+                items.append({"type": "stroke", "text": str(i), "is_written": True})
+            
+            items.append({"type": "arrow", "text": "→"})
+            items.append({"type": "char", "text": character, "is_written": True})
+            
+            return items
+        
+        if stroke_count == 1:
+            stroke_char = STROKE_NAME_TO_CHAR.get(stroke_names[0], stroke_names[0])
+            return [
+                {"type": "stroke", "text": stroke_char, "is_written": True},
+                {"type": "arrow", "text": "→"},
+                {"type": "char", "text": character, "is_written": True},
+            ]
         
         items = []
         
         for i in range(1, stroke_count + 1):
             if i > 1:
                 items.append({"type": "arrow", "text": "→"})
-            items.append({"type": "stroke", "text": str(i), "is_written": True})
-        
-        items.append({"type": "arrow", "text": "→"})
-        items.append({"type": "char", "text": character, "is_written": True})
+            
+            partial_stroke_names = stroke_names[:i]
+            partial_stroke_chars = [
+                STROKE_NAME_TO_CHAR.get(name, name) for name in partial_stroke_names
+            ]
+            
+            if i == stroke_count:
+                items.append({"type": "char", "text": character, "is_written": True})
+            else:
+                items.append({
+                    "type": "stroke", 
+                    "text": ''.join(partial_stroke_chars), 
+                    "is_written": True
+                })
         
         return items
     
