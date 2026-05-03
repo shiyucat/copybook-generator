@@ -35,6 +35,8 @@ const DEFAULT_CHARACTER_COLOR = '#000000'
 const DEFAULT_RIGHT_GRID_COLOR = '#000000'
 const DEFAULT_SHOW_CHARACTER_PINYIN = true
 const DEFAULT_RIGHT_GRID_TYPE = '米字格'
+const DEFAULT_STROKE_ORDER_COLOR = '#000000'
+const DEFAULT_SHOW_TRACE_COPY = false
 
 const SceneType = {
   NORMAL: 'normal',
@@ -82,6 +84,8 @@ function TemplateManager({ onApplyTemplate }) {
     character_color: DEFAULT_CHARACTER_COLOR,
     right_grid_color: DEFAULT_RIGHT_GRID_COLOR,
     right_grid_type: DEFAULT_RIGHT_GRID_TYPE,
+    stroke_order_color: DEFAULT_STROKE_ORDER_COLOR,
+    show_trace_copy: DEFAULT_SHOW_TRACE_COPY,
   })
   const [savingEdit, setSavingEdit] = useState(false)
 
@@ -170,6 +174,12 @@ function TemplateManager({ onApplyTemplate }) {
         ? configData.right_grid_color 
         : DEFAULT_RIGHT_GRID_COLOR,
       right_grid_type: configData.right_grid_type ?? DEFAULT_RIGHT_GRID_TYPE,
+      stroke_order_color: /^#[0-9A-Fa-f]{6}$/.test(configData.stroke_order_color) 
+        ? configData.stroke_order_color 
+        : DEFAULT_STROKE_ORDER_COLOR,
+      show_trace_copy: configData.show_trace_copy !== undefined 
+        ? configData.show_trace_copy 
+        : DEFAULT_SHOW_TRACE_COPY,
     })
     setShowEditDialog(true)
   }
@@ -203,6 +213,8 @@ function TemplateManager({ onApplyTemplate }) {
           character_color: editForm.character_color,
           right_grid_color: editForm.right_grid_color,
           right_grid_type: editForm.right_grid_type,
+          stroke_order_color: editForm.stroke_order_color,
+          show_trace_copy: editForm.show_trace_copy,
         },
       }
 
@@ -559,6 +571,31 @@ function TemplateManager({ onApplyTemplate }) {
                                 {configData.grid_color || '#000000'}
                               </span>
                             </div>
+                            <div className="config-item">
+                              <span className="config-label">笔顺颜色:</span>
+                              <span className="config-value">
+                                <span
+                                  className="color-swatch-small"
+                                  style={{
+                                    display: 'inline-block',
+                                    width: '16px',
+                                    height: '16px',
+                                    borderRadius: '3px',
+                                    backgroundColor: configData.stroke_order_color || '#000000',
+                                    marginRight: '6px',
+                                    verticalAlign: 'middle',
+                                    border: '1px solid #ddd',
+                                  }}
+                                />
+                                {configData.stroke_order_color || '#000000'}
+                              </span>
+                            </div>
+                            <div className="config-item">
+                              <span className="config-label">描红配置:</span>
+                              <span className="config-value">
+                                {configData.show_trace_copy ? '开启' : '关闭'}
+                              </span>
+                            </div>
                           </>
                         )}
                         {configData.scene_type !== SceneType.CHARACTER && (
@@ -862,6 +899,78 @@ function TemplateManager({ onApplyTemplate }) {
                         }}
                       />
                     </div>
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">笔顺颜色</label>
+                    <div className="color-input-row">
+                      <input
+                        type="color"
+                        className="color-picker-input"
+                        value={editForm.stroke_order_color}
+                        onChange={(e) => handleEditFormChange('stroke_order_color', e.target.value)}
+                      />
+                      <input
+                        type="text"
+                        className="form-input color-hex-input"
+                        value={editForm.stroke_order_color}
+                        onChange={(e) => {
+                          const val = e.target.value
+                          if (/^#[0-9A-Fa-f]{0,6}$/.test(val)) {
+                            handleEditFormChange('stroke_order_color', val.length === 7 ? val : editForm.stroke_order_color)
+                          }
+                        }}
+                        onBlur={(e) => {
+                          const val = e.target.value
+                          if (/^#[0-9A-Fa-f]{6}$/.test(val)) {
+                            handleEditFormChange('stroke_order_color', val)
+                          }
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">描红配置</label>
+                    <div 
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '8px 0',
+                      }}
+                    >
+                      <span style={{ fontSize: '14px', color: '#333' }}>右侧空格子显示描红</span>
+                      <div
+                        onClick={() => handleEditFormChange('show_trace_copy', !editForm.show_trace_copy)}
+                        style={{
+                          width: '50px',
+                          height: '28px',
+                          backgroundColor: editForm.show_trace_copy ? '#4CAF50' : '#ccc',
+                          borderRadius: '14px',
+                          position: 'relative',
+                          cursor: 'pointer',
+                          transition: 'background-color 0.3s',
+                        }}
+                      >
+                        <div
+                          style={{
+                            width: '22px',
+                            height: '22px',
+                            backgroundColor: 'white',
+                            borderRadius: '50%',
+                            position: 'absolute',
+                            top: '3px',
+                            left: editForm.show_trace_copy ? '25px' : '3px',
+                            transition: 'left 0.3s',
+                            boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+                          }}
+                        />
+                      </div>
+                    </div>
+                    <p style={{ marginTop: '4px', fontSize: '12px', color: '#666', margin: 0 }}>
+                      开启后在右侧练习格中显示30%透明度的生字作为描摹参考
+                    </p>
                   </div>
                 </>
               )}
