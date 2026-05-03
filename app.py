@@ -1441,7 +1441,14 @@ def get_assignments():
                 'status': assignment.status,
                 'assigned_at': assignment.assigned_at,
                 'completed_at': assignment.completed_at,
+                'submitted_at': assignment.submitted_at,
+                'reviewed_at': assignment.reviewed_at,
                 'config_data': assignment.config_data,
+                'submitted_image': assignment.submitted_image,
+                'review_status': assignment.review_status,
+                'review_comments': assignment.review_comments,
+                'review_annotations': assignment.review_annotations,
+                'submission_count': assignment.submission_count,
                 'created_at': assignment.created_at,
                 'updated_at': assignment.updated_at
             })
@@ -1493,7 +1500,14 @@ def get_assignment(assignment_id):
             'status': assignment.status,
             'assigned_at': assignment.assigned_at,
             'completed_at': assignment.completed_at,
+            'submitted_at': assignment.submitted_at,
+            'reviewed_at': assignment.reviewed_at,
             'config_data': assignment.config_data,
+            'submitted_image': assignment.submitted_image,
+            'review_status': assignment.review_status,
+            'review_comments': assignment.review_comments,
+            'review_annotations': assignment.review_annotations,
+            'submission_count': assignment.submission_count,
             'created_at': assignment.created_at,
             'updated_at': assignment.updated_at
         }
@@ -1782,6 +1796,243 @@ def get_assignment_count():
             'success': True,
             'count': count
         })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/assignments/<int:assignment_id>/submit', methods=['POST'])
+def submit_assignment(assignment_id):
+    """
+    学生提交作业（带图片）
+    
+    Args:
+        assignment_id: 作业 ID
+        
+    Request Body:
+        {
+            "submitted_image": "base64编码的图片数据或图片URL"
+        }
+    
+    Returns:
+        提交结果
+    """
+    try:
+        existing = db.get_assignment_by_id(assignment_id)
+        
+        if existing is None:
+            return jsonify({
+                'success': False,
+                'error': '作业不存在'
+            }), 404
+        
+        data = request.get_json() or {}
+        submitted_image = data.get('submitted_image')
+        
+        updated = db.submit_assignment(assignment_id, submitted_image)
+        
+        if updated:
+            result = {
+                'assignment_id': updated.assignment_id,
+                'student_no': updated.student_no,
+                'template_id': updated.template_id,
+                'characters': updated.characters,
+                'scene_type': updated.scene_type,
+                'status': updated.status,
+                'assigned_at': updated.assigned_at,
+                'completed_at': updated.completed_at,
+                'submitted_at': updated.submitted_at,
+                'reviewed_at': updated.reviewed_at,
+                'config_data': updated.config_data,
+                'submitted_image': updated.submitted_image,
+                'review_status': updated.review_status,
+                'review_comments': updated.review_comments,
+                'review_annotations': updated.review_annotations,
+                'submission_count': updated.submission_count,
+                'created_at': updated.created_at,
+                'updated_at': updated.updated_at
+            }
+            
+            return jsonify({
+                'success': True,
+                'message': '作业已提交',
+                'data': result
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': '提交失败'
+            }), 500
+            
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/assignments/<int:assignment_id>/review', methods=['POST'])
+def review_assignment(assignment_id):
+    """
+    老师批改作业
+    
+    Args:
+        assignment_id: 作业 ID
+        
+    Request Body:
+        {
+            "review_status": "approved" 或 "rejected",
+            "review_comments": "批改评语",
+            "review_annotations": {
+                "circles": [
+                    {"x": 100, "y": 150, "radius": 30, "label": "问题字"}
+                ]
+            }
+        }
+    
+    Returns:
+        批改结果
+    """
+    try:
+        existing = db.get_assignment_by_id(assignment_id)
+        
+        if existing is None:
+            return jsonify({
+                'success': False,
+                'error': '作业不存在'
+            }), 404
+        
+        data = request.get_json() or {}
+        review_status = data.get('review_status')
+        review_comments = data.get('review_comments')
+        review_annotations = data.get('review_annotations', {})
+        
+        if review_status not in [Assignment.REVIEW_STATUS_APPROVED, Assignment.REVIEW_STATUS_REJECTED]:
+            return jsonify({
+                'success': False,
+                'error': '无效的批改状态，必须是 approved 或 rejected'
+            }), 400
+        
+        updated = db.review_assignment(
+            assignment_id, 
+            review_status, 
+            review_comments, 
+            review_annotations
+        )
+        
+        if updated:
+            result = {
+                'assignment_id': updated.assignment_id,
+                'student_no': updated.student_no,
+                'template_id': updated.template_id,
+                'characters': updated.characters,
+                'scene_type': updated.scene_type,
+                'status': updated.status,
+                'assigned_at': updated.assigned_at,
+                'completed_at': updated.completed_at,
+                'submitted_at': updated.submitted_at,
+                'reviewed_at': updated.reviewed_at,
+                'config_data': updated.config_data,
+                'submitted_image': updated.submitted_image,
+                'review_status': updated.review_status,
+                'review_comments': updated.review_comments,
+                'review_annotations': updated.review_annotations,
+                'submission_count': updated.submission_count,
+                'created_at': updated.created_at,
+                'updated_at': updated.updated_at
+            }
+            
+            status_message = '作业已通过' if review_status == Assignment.REVIEW_STATUS_APPROVED else '作业已驳回'
+            
+            return jsonify({
+                'success': True,
+                'message': status_message,
+                'data': result
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': '批改失败'
+            }), 500
+            
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/assignments/<int:assignment_id>/resubmit', methods=['POST'])
+def resubmit_assignment(assignment_id):
+    """
+    学生重新提交作业（当作业被驳回时）
+    
+    Args:
+        assignment_id: 作业 ID
+        
+    Request Body:
+        {
+            "submitted_image": "base64编码的图片数据或图片URL"
+        }
+    
+    Returns:
+        重新提交结果
+    """
+    try:
+        existing = db.get_assignment_by_id(assignment_id)
+        
+        if existing is None:
+            return jsonify({
+                'success': False,
+                'error': '作业不存在'
+            }), 404
+        
+        if existing.status != Assignment.STATUS_REJECTED:
+            return jsonify({
+                'success': False,
+                'error': '只有被驳回的作业才能重新提交'
+            }), 400
+        
+        data = request.get_json() or {}
+        submitted_image = data.get('submitted_image')
+        
+        updated = db.resubmit_assignment(assignment_id, submitted_image)
+        
+        if updated:
+            result = {
+                'assignment_id': updated.assignment_id,
+                'student_no': updated.student_no,
+                'template_id': updated.template_id,
+                'characters': updated.characters,
+                'scene_type': updated.scene_type,
+                'status': updated.status,
+                'assigned_at': updated.assigned_at,
+                'completed_at': updated.completed_at,
+                'submitted_at': updated.submitted_at,
+                'reviewed_at': updated.reviewed_at,
+                'config_data': updated.config_data,
+                'submitted_image': updated.submitted_image,
+                'review_status': updated.review_status,
+                'review_comments': updated.review_comments,
+                'review_annotations': updated.review_annotations,
+                'submission_count': updated.submission_count,
+                'created_at': updated.created_at,
+                'updated_at': updated.updated_at
+            }
+            
+            return jsonify({
+                'success': True,
+                'message': '作业已重新提交',
+                'data': result
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': '重新提交失败'
+            }), 500
+            
     except Exception as e:
         return jsonify({
             'success': False,

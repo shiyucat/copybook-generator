@@ -15,6 +15,7 @@ function Sidebar({
     { id: 'editor', label: '字帖编辑', icon: '✏️' },
     { id: 'templates', label: '模版管理', icon: '📁' },
     { id: 'students', label: '学生管理', icon: '👥' },
+    { id: 'tasks', label: '作业管理', icon: '📋' },
     { id: 'history', label: '导出历史', icon: '📜' },
   ]
 
