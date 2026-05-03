@@ -623,13 +623,9 @@ function CopybookEditor({ config, onConfigChange, selectedTemplateId: propSelect
     }
     
     const strokeChars = strokes.map(s => STROKE_NAME_TO_CHAR[s] || s)
+    const strokesStr = strokeChars.join('')
     
-    if (strokeChars.length === 1) {
-      return `笔顺：${character}`
-    }
-    
-    const firstStroke = strokeChars[0]
-    return `笔顺：${firstStroke}${character}`
+    return `笔顺：${strokesStr}`
   }, [])
 
   const drawStrokeOrderRow = useCallback((ctx, x, y, width, height, character, strokeOrderColor) => {
@@ -662,15 +658,15 @@ function CopybookEditor({ config, onConfigChange, selectedTemplateId: propSelect
 
     const cols = Math.max(1, Math.floor(rightAreaWidth / gridSize))
 
-    const rightGridsY = y
-    const strokeOrderRowY = rightGridsY + rightRows * gridSize
+    const strokeOrderRowY = y
+    const rightGridsY = y + strokeOrderRowHeight
 
     drawStrokeOrderRow(ctx, rightAreaX, strokeOrderRowY, cols * gridSize, strokeOrderRowHeight, character, strokeOrderColor)
 
     for (let row = 0; row < rightRows; row++) {
       for (let col = 0; col < cols; col++) {
         const gridX = rightAreaX + col * gridSize
-        const gridY = y + row * gridSize
+        const gridY = rightGridsY + row * gridSize
         
         if (gridX + gridSize <= x + rowWidth) {
           drawGrid(ctx, gridX, gridY, gridSize, rightGridType, rightGridColor)

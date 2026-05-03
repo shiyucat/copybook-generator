@@ -3088,7 +3088,7 @@ class CopybookGenerator:
         获取笔顺展示文本
         
         格式："笔顺：xxxx"
-        例如"人"字："笔顺：丿人"（第一笔 + 完整字）
+        例如"人"字："笔顺：丿㇏"（显示所有笔画字符）
         
         Args:
             character: 汉字字符
@@ -3101,12 +3101,9 @@ class CopybookGenerator:
         if not stroke_chars:
             return f"笔顺：{character}"
         
-        if len(stroke_chars) == 1:
-            return f"笔顺：{character}"
+        strokes_str = ''.join(stroke_chars)
         
-        first_stroke = stroke_chars[0]
-        
-        return f"笔顺：{first_stroke}{character}"
+        return f"笔顺：{strokes_str}"
     
     def _get_progressive_stroke_texts(self, character: str) -> List[str]:
         """
@@ -3156,7 +3153,7 @@ class CopybookGenerator:
         layout = self._calculate_character_scene_layout()
         row_height = layout["stroke_order_row_height"]
         
-        c.setStrokeColor(Color(self.grid_color[0], self.grid_color[1], self.grid_color[2]))
+        c.setStrokeColor(Color(self.stroke_order_color[0], self.stroke_order_color[1], self.stroke_order_color[2]))
         c.setLineWidth(0.5)
         c.rect(x, y, width, row_height)
         
