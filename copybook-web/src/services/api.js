@@ -379,6 +379,52 @@ export const assignmentApi = {
     return data
   },
 
+  async submit(id, submittedImage = null) {
+    const response = await fetch(`${API_BASE}/assignments/${id}/submit`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ submitted_image: submittedImage }),
+    })
+    if (!response.ok) throw new Error('提交作业失败')
+    const data = await response.json()
+    if (!data.success) throw new Error(data.error || '提交作业失败')
+    return data.data
+  },
+
+  async review(id, reviewStatus, reviewComments = null, reviewAnnotations = {}) {
+    const response = await fetch(`${API_BASE}/assignments/${id}/review`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        review_status: reviewStatus,
+        review_comments: reviewComments,
+        review_annotations: reviewAnnotations,
+      }),
+    })
+    if (!response.ok) throw new Error('批改作业失败')
+    const data = await response.json()
+    if (!data.success) throw new Error(data.error || '批改作业失败')
+    return data.data
+  },
+
+  async resubmit(id, submittedImage = null) {
+    const response = await fetch(`${API_BASE}/assignments/${id}/resubmit`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ submitted_image: submittedImage }),
+    })
+    if (!response.ok) throw new Error('重新提交作业失败')
+    const data = await response.json()
+    if (!data.success) throw new Error(data.error || '重新提交作业失败')
+    return data.data
+  },
+
   async delete(id) {
     const response = await fetch(`${API_BASE}/assignments/${id}`, {
       method: 'DELETE',

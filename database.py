@@ -154,6 +154,12 @@ class Assignment:
     
     STATUS_PENDING = "pending"
     STATUS_COMPLETED = "completed"
+    STATUS_SUBMITTED = "submitted"
+    STATUS_REVIEWED = "reviewed"
+    STATUS_REJECTED = "rejected"
+    
+    REVIEW_STATUS_APPROVED = "approved"
+    REVIEW_STATUS_REJECTED = "rejected"
     
     def __init__(self, 
                  assignment_id: int = None,
@@ -164,7 +170,16 @@ class Assignment:
                  status: str = STATUS_PENDING,
                  assigned_at: str = None,
                  completed_at: str = None,
-                 config_data: Dict[str, Any] = None):
+                 submitted_at: str = None,
+                 reviewed_at: str = None,
+                 config_data: Dict[str, Any] = None,
+                 submitted_image: str = None,
+                 review_status: str = None,
+                 review_comments: str = None,
+                 review_annotations: Dict[str, Any] = None,
+                 submission_count: int = 0,
+                 created_at: str = None,
+                 updated_at: str = None):
         self.assignment_id = assignment_id
         self.student_no = student_no
         self.template_id = template_id
@@ -173,7 +188,16 @@ class Assignment:
         self.status = status
         self.assigned_at = assigned_at or datetime.now().isoformat()
         self.completed_at = completed_at
+        self.submitted_at = submitted_at
+        self.reviewed_at = reviewed_at
         self.config_data = config_data or {}
+        self.submitted_image = submitted_image
+        self.review_status = review_status
+        self.review_comments = review_comments
+        self.review_annotations = review_annotations or {}
+        self.submission_count = submission_count or 0
+        self.created_at = created_at or self.assigned_at
+        self.updated_at = updated_at or self.created_at
     
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -185,7 +209,16 @@ class Assignment:
             "status": self.status,
             "assigned_at": self.assigned_at,
             "completed_at": self.completed_at,
-            "config_data": self.config_data
+            "submitted_at": self.submitted_at,
+            "reviewed_at": self.reviewed_at,
+            "config_data": self.config_data,
+            "submitted_image": self.submitted_image,
+            "review_status": self.review_status,
+            "review_comments": self.review_comments,
+            "review_annotations": self.review_annotations,
+            "submission_count": self.submission_count,
+            "created_at": self.created_at,
+            "updated_at": self.updated_at
         }
     
     @classmethod
@@ -193,6 +226,11 @@ class Assignment:
         config_data = data.get("config_data")
         if isinstance(config_data, str):
             config_data = json.loads(config_data)
+        
+        review_annotations = data.get("review_annotations")
+        if isinstance(review_annotations, str):
+            review_annotations = json.loads(review_annotations)
+        
         return cls(
             assignment_id=data.get("assignment_id"),
             student_no=data.get("student_no", ""),
@@ -202,7 +240,16 @@ class Assignment:
             status=data.get("status", cls.STATUS_PENDING),
             assigned_at=data.get("assigned_at"),
             completed_at=data.get("completed_at"),
-            config_data=config_data or {}
+            submitted_at=data.get("submitted_at"),
+            reviewed_at=data.get("reviewed_at"),
+            config_data=config_data or {},
+            submitted_image=data.get("submitted_image"),
+            review_status=data.get("review_status"),
+            review_comments=data.get("review_comments"),
+            review_annotations=review_annotations or {},
+            submission_count=data.get("submission_count", 0),
+            created_at=data.get("created_at"),
+            updated_at=data.get("updated_at")
         )
 
 
@@ -245,6 +292,34 @@ class TemplateDatabase:
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
         return conn
+    
+    def _migrate_assignments_table(self, conn: sqlite3.Connection, cursor: sqlite3.Cursor):
+        """迁移 assignments 表，添加新字段"""
+        try:
+            cursor.execute("PRAGMA table_info(assignments)")
+            columns = [row[1] for row in cursor.fetchall()]
+            
+            new_columns = [
+                ('submitted_at', 'TEXT'),
+                ('reviewed_at', 'TEXT'),
+                ('submitted_image', 'TEXT'),
+                ('review_status', 'TEXT'),
+                ('review_comments', 'TEXT'),
+                ('review_annotations', "TEXT NOT NULL DEFAULT '{}'"),
+                ('submission_count', 'INTEGER NOT NULL DEFAULT 0'),
+            ]
+            
+            for col_name, col_def in new_columns:
+                if col_name not in columns:
+                    try:
+                        cursor.execute(f"ALTER TABLE assignments ADD COLUMN {col_name} {col_def}")
+                        print(f"已添加字段: {col_name}")
+                    except Exception as e:
+                        print(f"添加字段 {col_name} 失败: {e}")
+            
+            conn.commit()
+        except Exception as e:
+            print(f"迁移 assignments 表失败: {e}")
     
     def _init_database(self):
         """初始化数据库表"""
@@ -327,11 +402,20 @@ class TemplateDatabase:
                 status TEXT NOT NULL DEFAULT 'pending',
                 assigned_at TEXT NOT NULL,
                 completed_at TEXT,
+                submitted_at TEXT,
+                reviewed_at TEXT,
                 config_data TEXT NOT NULL DEFAULT '{}',
+                submitted_image TEXT,
+                review_status TEXT,
+                review_comments TEXT,
+                review_annotations TEXT NOT NULL DEFAULT '{}',
+                submission_count INTEGER NOT NULL DEFAULT 0,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             )
         """)
+        
+        self._migrate_assignments_table(conn, cursor)
         
         cursor.execute("""
             CREATE INDEX IF NOT EXISTS idx_assignment_student_no 
@@ -1291,7 +1375,10 @@ class TemplateDatabase:
                 cursor.execute("""
                     UPDATE assignments 
                     SET student_no = ?, template_id = ?, characters = ?, scene_type = ?, 
-                        status = ?, assigned_at = ?, completed_at = ?, config_data = ?, updated_at = ?
+                        status = ?, assigned_at = ?, completed_at = ?, submitted_at = ?, 
+                        reviewed_at = ?, config_data = ?, submitted_image = ?, 
+                        review_status = ?, review_comments = ?, review_annotations = ?, 
+                        submission_count = ?, updated_at = ?
                     WHERE id = ?
                 """, (
                     assignment.student_no,
@@ -1301,7 +1388,14 @@ class TemplateDatabase:
                     assignment.status,
                     assignment.assigned_at,
                     assignment.completed_at,
+                    assignment.submitted_at,
+                    assignment.reviewed_at,
                     json.dumps(assignment.config_data, ensure_ascii=False),
+                    assignment.submitted_image,
+                    assignment.review_status,
+                    assignment.review_comments,
+                    json.dumps(assignment.review_annotations, ensure_ascii=False),
+                    assignment.submission_count,
                     now,
                     assignment.assignment_id
                 ))
@@ -1312,9 +1406,12 @@ class TemplateDatabase:
         cursor.execute("""
             INSERT INTO assignments (
                 student_no, template_id, characters, scene_type, 
-                status, assigned_at, completed_at, config_data, created_at, updated_at
+                status, assigned_at, completed_at, submitted_at, 
+                reviewed_at, config_data, submitted_image, 
+                review_status, review_comments, review_annotations, 
+                submission_count, created_at, updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             assignment.student_no,
             assignment.template_id,
@@ -1323,7 +1420,14 @@ class TemplateDatabase:
             assignment.status,
             assignment.assigned_at,
             assignment.completed_at,
+            assignment.submitted_at,
+            assignment.reviewed_at,
             json.dumps(assignment.config_data, ensure_ascii=False),
+            assignment.submitted_image,
+            assignment.review_status,
+            assignment.review_comments,
+            json.dumps(assignment.review_annotations, ensure_ascii=False),
+            assignment.submission_count,
             now,
             now
         ))
@@ -1349,7 +1453,9 @@ class TemplateDatabase:
         
         cursor.execute("""
             SELECT id as assignment_id, student_no, template_id, characters, 
-                   scene_type, status, assigned_at, completed_at, config_data,
+                   scene_type, status, assigned_at, completed_at, submitted_at,
+                   reviewed_at, config_data, submitted_image, review_status,
+                   review_comments, review_annotations, submission_count,
                    created_at, updated_at
             FROM assignments 
             WHERE id = ?
@@ -1377,7 +1483,9 @@ class TemplateDatabase:
         
         cursor.execute("""
             SELECT id as assignment_id, student_no, template_id, characters, 
-                   scene_type, status, assigned_at, completed_at, config_data,
+                   scene_type, status, assigned_at, completed_at, submitted_at,
+                   reviewed_at, config_data, submitted_image, review_status,
+                   review_comments, review_annotations, submission_count,
                    created_at, updated_at
             FROM assignments 
             WHERE student_no = ?
@@ -1437,7 +1545,9 @@ class TemplateDatabase:
         
         select_sql = f"""
             SELECT id as assignment_id, student_no, template_id, characters, 
-                   scene_type, status, assigned_at, completed_at, config_data,
+                   scene_type, status, assigned_at, completed_at, submitted_at,
+                   reviewed_at, config_data, submitted_image, review_status,
+                   review_comments, review_annotations, submission_count,
                    created_at, updated_at
             FROM assignments 
             WHERE {where_clause}
@@ -1543,3 +1653,125 @@ class TemplateDatabase:
         conn.close()
         
         return count
+    
+    def submit_assignment(self, assignment_id: int, submitted_image: str = None) -> Optional[Assignment]:
+        """
+        学生提交作业
+        
+        Args:
+            assignment_id: 作业ID
+            submitted_image: 提交的图片（base64编码或文件路径）
+            
+        Returns:
+            更新后的作业对象，如果失败返回 None
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        
+        now = datetime.now().isoformat()
+        
+        try:
+            cursor.execute("""
+                UPDATE assignments 
+                SET status = ?, submitted_at = ?, submitted_image = ?, 
+                    submission_count = submission_count + 1, updated_at = ?
+                WHERE id = ?
+            """, (Assignment.STATUS_SUBMITTED, now, submitted_image, now, assignment_id))
+            
+            affected = cursor.rowcount
+            conn.commit()
+            
+            if affected > 0:
+                return self.get_assignment_by_id(assignment_id)
+            return None
+        finally:
+            conn.close()
+    
+    def review_assignment(
+        self, 
+        assignment_id: int, 
+        review_status: str, 
+        review_comments: str = None,
+        review_annotations: Dict[str, Any] = None
+    ) -> Optional[Assignment]:
+        """
+        老师批改作业
+        
+        Args:
+            assignment_id: 作业ID
+            review_status: 批改状态（approved 或 rejected）
+            review_comments: 批改评语
+            review_annotations: 批改标注数据（画圈位置等）
+            
+        Returns:
+            更新后的作业对象，如果失败返回 None
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        
+        now = datetime.now().isoformat()
+        
+        try:
+            if review_status == Assignment.REVIEW_STATUS_APPROVED:
+                status = Assignment.STATUS_REVIEWED
+            else:
+                status = Assignment.STATUS_REJECTED
+            
+            cursor.execute("""
+                UPDATE assignments 
+                SET status = ?, reviewed_at = ?, review_status = ?, 
+                    review_comments = ?, review_annotations = ?, updated_at = ?
+                WHERE id = ?
+            """, (
+                status, 
+                now, 
+                review_status, 
+                review_comments, 
+                json.dumps(review_annotations or {}, ensure_ascii=False),
+                now, 
+                assignment_id
+            ))
+            
+            affected = cursor.rowcount
+            conn.commit()
+            
+            if affected > 0:
+                return self.get_assignment_by_id(assignment_id)
+            return None
+        finally:
+            conn.close()
+    
+    def resubmit_assignment(self, assignment_id: int, submitted_image: str = None) -> Optional[Assignment]:
+        """
+        学生重新提交作业（当作业被拒绝时）
+        
+        Args:
+            assignment_id: 作业ID
+            submitted_image: 重新提交的图片
+            
+        Returns:
+            更新后的作业对象，如果失败返回 None
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        
+        now = datetime.now().isoformat()
+        
+        try:
+            cursor.execute("""
+                UPDATE assignments 
+                SET status = ?, submitted_at = ?, submitted_image = ?, 
+                    review_status = NULL, review_comments = NULL, 
+                    review_annotations = '{}', reviewed_at = NULL,
+                    submission_count = submission_count + 1, updated_at = ?
+                WHERE id = ? AND status = ?
+            """, (Assignment.STATUS_SUBMITTED, now, submitted_image, now, assignment_id, Assignment.STATUS_REJECTED))
+            
+            affected = cursor.rowcount
+            conn.commit()
+            
+            if affected > 0:
+                return self.get_assignment_by_id(assignment_id)
+            return None
+        finally:
+            conn.close()

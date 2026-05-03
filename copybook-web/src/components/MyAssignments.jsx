@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { assignmentApi } from '../services/api'
 
 const PAGE_SIZE_OPTIONS = [10, 20, 40, 100]
@@ -6,11 +6,22 @@ const PAGE_SIZE_OPTIONS = [10, 20, 40, 100]
 const StatusLabels = {
   pending: '未完成',
   completed: '已完成',
+  submitted: '已提交',
+  reviewed: '已通过',
+  rejected: '已驳回',
 }
 
 const StatusStyles = {
   pending: { color: '#ff9800', backgroundColor: '#fff3e0' },
   completed: { color: '#4caf50', backgroundColor: '#e8f5e9' },
+  submitted: { color: '#2196f3', backgroundColor: '#e3f2fd' },
+  reviewed: { color: '#4caf50', backgroundColor: '#e8f5e9' },
+  rejected: { color: '#f44336', backgroundColor: '#ffebee' },
+}
+
+const ReviewStatusLabels = {
+  approved: '通过',
+  rejected: '驳回',
 }
 
 const SceneTypeLabels = {
@@ -33,7 +44,15 @@ function MyAssignments({ studentNo, onImportAssignment }) {
   })
   const [statusFilter, setStatusFilter] = useState('')
 
-  const [completingId, setCompletingId] = useState(null)
+  const [submittingId, setSubmittingId] = useState(null)
+  const [showSubmitDialog, setShowSubmitDialog] = useState(false)
+  const [selectedAssignment, setSelectedAssignment] = useState(null)
+  const [previewImage, setPreviewImage] = useState(null)
+  const [submitImage, setSubmitImage] = useState(null)
+  const [isUploading, setIsUploading] = useState(false)
+  const [showDetailDialog, setShowDetailDialog] = useState(false)
+  
+  const fileInputRef = useRef(null)
 
   const fetchAssignments = useCallback(async (page = 1, size = pageSize, status = statusFilter) => {
     if (!studentNo) {
@@ -70,29 +89,103 @@ function MyAssignments({ studentNo, onImportAssignment }) {
     }
   }
 
-  const handleMarkComplete = async (assignment) => {
-    if (assignment.status === 'completed') {
+  const handleImageSelect = (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    if (!file.type.startsWith('image/')) {
+      alert('请选择图片文件')
       return
     }
 
-    if (!window.confirm(`确定要标记该作业为已完成吗？`)) {
+    const reader = new FileReader()
+    reader.onload = (event) => {
+      setSubmitImage(event.target?.result)
+    }
+    reader.readAsDataURL(file)
+  }
+
+  const handleSubmitAssignment = async () => {
+    if (!selectedAssignment) return
+
+    if (!submitImage) {
+      alert('请先上传作业图片')
       return
     }
 
-    setCompletingId(assignment.assignment_id)
+    if (!window.confirm('确定要提交该作业吗？')) {
+      return
+    }
+
+    setIsUploading(true)
+    setSubmittingId(selectedAssignment.assignment_id)
+    
     try {
-      const updated = await assignmentApi.markComplete(assignment.assignment_id)
+      const updated = await assignmentApi.submit(selectedAssignment.assignment_id, submitImage)
+      
       setAssignments((prev) =>
         prev.map((a) =>
-          a.assignment_id === assignment.assignment_id ? updated : a
+          a.assignment_id === selectedAssignment.assignment_id ? updated : a
         )
       )
-      alert('作业已标记为完成！')
+      
+      alert('作业提交成功！')
+      setShowSubmitDialog(false)
+      setSubmitImage(null)
+      setSelectedAssignment(null)
     } catch (err) {
-      alert(`标记完成失败: ${err.message}`)
+      alert(`提交失败: ${err.message}`)
     } finally {
-      setCompletingId(null)
+      setIsUploading(false)
+      setSubmittingId(null)
     }
+  }
+
+  const handleResubmitAssignment = async () => {
+    if (!selectedAssignment) return
+
+    if (!submitImage) {
+      alert('请先上传新的作业图片')
+      return
+    }
+
+    if (!window.confirm('确定要重新提交该作业吗？')) {
+      return
+    }
+
+    setIsUploading(true)
+    setSubmittingId(selectedAssignment.assignment_id)
+    
+    try {
+      const updated = await assignmentApi.resubmit(selectedAssignment.assignment_id, submitImage)
+      
+      setAssignments((prev) =>
+        prev.map((a) =>
+          a.assignment_id === selectedAssignment.assignment_id ? updated : a
+        )
+      )
+      
+      alert('作业重新提交成功！')
+      setShowSubmitDialog(false)
+      setSubmitImage(null)
+      setSelectedAssignment(null)
+    } catch (err) {
+      alert(`重新提交失败: ${err.message}`)
+    } finally {
+      setIsUploading(false)
+      setSubmittingId(null)
+    }
+  }
+
+  const openSubmitDialog = (assignment) => {
+    setSelectedAssignment(assignment)
+    setSubmitImage(null)
+    setShowSubmitDialog(true)
+  }
+
+  const openDetailDialog = (assignment) => {
+    setSelectedAssignment(assignment)
+    setShowDetailDialog(true)
   }
 
   const handleImport = (assignment) => {
@@ -119,6 +212,14 @@ function MyAssignments({ studentNo, onImportAssignment }) {
 
   const getSceneTypeLabel = (sceneType) => {
     return SceneTypeLabels[sceneType] || '练字'
+  }
+
+  const canSubmit = (status) => {
+    return status === 'pending' || status === 'completed'
+  }
+
+  const canResubmit = (status) => {
+    return status === 'rejected'
   }
 
   const renderPagination = () => {
@@ -240,6 +341,230 @@ function MyAssignments({ studentNo, onImportAssignment }) {
     )
   }
 
+  const renderSubmitDialog = () => {
+    if (!showSubmitDialog || !selectedAssignment) return null
+
+    const isResubmit = selectedAssignment.status === 'rejected'
+
+    return (
+      <div className="modal-overlay" onClick={() => {
+        setShowSubmitDialog(false)
+        setSelectedAssignment(null)
+        setSubmitImage(null)
+      }}>
+        <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '600px', width: '90vw' }}>
+          <div className="modal-header">
+            <h3>{isResubmit ? '重新提交作业' : '提交作业'}</h3>
+            <button
+              className="modal-close"
+              onClick={() => {
+                setShowSubmitDialog(false)
+                setSelectedAssignment(null)
+                setSubmitImage(null)
+              }}
+            >
+              ✕
+            </button>
+          </div>
+          <div className="modal-body">
+            <div style={{ marginBottom: '16px' }}>
+              <label className="form-label" style={{ display: 'block', marginBottom: '8px', fontWeight: '500' }}>
+                作业信息
+              </label>
+              <div style={{ padding: '12px', backgroundColor: '#f5f5f5', borderRadius: '4px' }}>
+                <p style={{ margin: '0 0 8px 0', fontSize: '14px' }}>
+                  <strong>练习文字：</strong>{selectedAssignment.characters}
+                </p>
+                <p style={{ margin: '0', fontSize: '14px' }}>
+                  <strong>场景类型：</strong>{getSceneTypeLabel(selectedAssignment.scene_type)}
+                </p>
+                {selectedAssignment.review_comments && (
+                  <p style={{ margin: '8px 0 0 0', fontSize: '14px', color: '#f44336' }}>
+                    <strong>老师评语：</strong>{selectedAssignment.review_comments}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <div style={{ marginBottom: '16px' }}>
+              <label className="form-label" style={{ display: 'block', marginBottom: '8px', fontWeight: '500' }}>
+                上传作业图片
+              </label>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleImageSelect}
+                style={{ marginBottom: '12px' }}
+              />
+              {submitImage && (
+                <div style={{ marginTop: '12px' }}>
+                  <p style={{ fontSize: '13px', color: '#666', marginBottom: '8px' }}>预览：</p>
+                  <img
+                    src={submitImage}
+                    alt="作业预览"
+                    style={{
+                      maxWidth: '100%',
+                      maxHeight: '300px',
+                      border: '1px solid #ddd',
+                      borderRadius: '4px',
+                    }}
+                  />
+                </div>
+              )}
+            </div>
+          </div>
+          <div className="modal-footer">
+            <button
+              className="btn btn-secondary"
+              onClick={() => {
+                setShowSubmitDialog(false)
+                setSelectedAssignment(null)
+                setSubmitImage(null)
+              }}
+              disabled={isUploading}
+            >
+              取消
+            </button>
+            <button
+              className="btn btn-primary"
+              onClick={isResubmit ? handleResubmitAssignment : handleSubmitAssignment}
+              disabled={isUploading || !submitImage}
+            >
+              {isUploading ? '提交中...' : (isResubmit ? '重新提交' : '提交')}
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  const renderDetailDialog = () => {
+    if (!showDetailDialog || !selectedAssignment) return null
+
+    return (
+      <div className="modal-overlay" onClick={() => {
+        setShowDetailDialog(false)
+        setSelectedAssignment(null)
+      }}>
+        <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '700px', width: '90vw' }}>
+          <div className="modal-header">
+            <h3>作业详情</h3>
+            <button
+              className="modal-close"
+              onClick={() => {
+                setShowDetailDialog(false)
+                setSelectedAssignment(null)
+              }}
+            >
+              ✕
+            </button>
+          </div>
+          <div className="modal-body">
+            <div style={{ marginBottom: '16px' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <tbody>
+                  <tr>
+                    <td style={{ padding: '8px', borderBottom: '1px solid #eee', fontWeight: '500', width: '100px' }}>练习文字</td>
+                    <td style={{ padding: '8px', borderBottom: '1px solid #eee' }}>{selectedAssignment.characters}</td>
+                  </tr>
+                  <tr>
+                    <td style={{ padding: '8px', borderBottom: '1px solid #eee', fontWeight: '500' }}>场景类型</td>
+                    <td style={{ padding: '8px', borderBottom: '1px solid #eee' }}>{getSceneTypeLabel(selectedAssignment.scene_type)}</td>
+                  </tr>
+                  <tr>
+                    <td style={{ padding: '8px', borderBottom: '1px solid #eee', fontWeight: '500' }}>布置时间</td>
+                    <td style={{ padding: '8px', borderBottom: '1px solid #eee' }}>{formatDateTime(selectedAssignment.assigned_at)}</td>
+                  </tr>
+                  <tr>
+                    <td style={{ padding: '8px', borderBottom: '1px solid #eee', fontWeight: '500' }}>提交时间</td>
+                    <td style={{ padding: '8px', borderBottom: '1px solid #eee' }}>{formatDateTime(selectedAssignment.submitted_at)}</td>
+                  </tr>
+                  <tr>
+                    <td style={{ padding: '8px', borderBottom: '1px solid #eee', fontWeight: '500' }}>批改时间</td>
+                    <td style={{ padding: '8px', borderBottom: '1px solid #eee' }}>{formatDateTime(selectedAssignment.reviewed_at)}</td>
+                  </tr>
+                  <tr>
+                    <td style={{ padding: '8px', borderBottom: '1px solid #eee', fontWeight: '500' }}>提交次数</td>
+                    <td style={{ padding: '8px', borderBottom: '1px solid #eee' }}>{selectedAssignment.submission_count || 0} 次</td>
+                  </tr>
+                  <tr>
+                    <td style={{ padding: '8px', borderBottom: '1px solid #eee', fontWeight: '500' }}>状态</td>
+                    <td style={{ padding: '8px', borderBottom: '1px solid #eee' }}>
+                      <span style={{
+                        padding: '4px 12px',
+                        borderRadius: '20px',
+                        fontSize: '12px',
+                        fontWeight: '500',
+                        ...StatusStyles[selectedAssignment.status],
+                      }}>
+                        {StatusLabels[selectedAssignment.status] || '未知'}
+                      </span>
+                    </td>
+                  </tr>
+                  {selectedAssignment.review_status && (
+                    <tr>
+                      <td style={{ padding: '8px', borderBottom: '1px solid #eee', fontWeight: '500' }}>批改结果</td>
+                      <td style={{ padding: '8px', borderBottom: '1px solid #eee' }}>
+                        {ReviewStatusLabels[selectedAssignment.review_status] || selectedAssignment.review_status}
+                      </td>
+                    </tr>
+                  )}
+                  {selectedAssignment.review_comments && (
+                    <tr>
+                      <td style={{ padding: '8px', borderBottom: '1px solid #eee', fontWeight: '500' }}>老师评语</td>
+                      <td style={{ padding: '8px', borderBottom: '1px solid #eee', color: '#f44336' }}>
+                        {selectedAssignment.review_comments}
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {selectedAssignment.submitted_image && (
+              <div>
+                <p style={{ fontSize: '14px', fontWeight: '500', marginBottom: '8px' }}>提交的作业图片：</p>
+                <img
+                  src={selectedAssignment.submitted_image}
+                  alt="提交的作业"
+                  style={{
+                    maxWidth: '100%',
+                    border: '1px solid #ddd',
+                    borderRadius: '4px',
+                  }}
+                />
+              </div>
+            )}
+          </div>
+          <div className="modal-footer">
+            <button
+              className="btn btn-secondary"
+              onClick={() => {
+                setShowDetailDialog(false)
+                setSelectedAssignment(null)
+              }}
+            >
+              关闭
+            </button>
+            {canResubmit(selectedAssignment.status) && (
+              <button
+                className="btn btn-primary"
+                onClick={() => {
+                  setShowDetailDialog(false)
+                  openSubmitDialog(selectedAssignment)
+                }}
+                style={{ backgroundColor: '#ff9800' }}
+              >
+                重新提交
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   if (!studentNo) {
     return (
       <div className="empty-state">
@@ -280,6 +605,9 @@ function MyAssignments({ studentNo, onImportAssignment }) {
               <option value="">全部</option>
               <option value="pending">未完成</option>
               <option value="completed">已完成</option>
+              <option value="submitted">已提交</option>
+              <option value="reviewed">已通过</option>
+              <option value="rejected">已驳回</option>
             </select>
           </div>
           <button
@@ -314,24 +642,26 @@ function MyAssignments({ studentNo, onImportAssignment }) {
                 <tr>
                   <th style={{ width: '120px' }}>场景类型</th>
                   <th style={{ width: '160px' }}>布置时间</th>
-                  <th style={{ width: '160px' }}>完成时间</th>
+                  <th style={{ width: '160px' }}>提交时间</th>
                   <th style={{ width: '80px' }}>状态</th>
                   <th style={{ width: '300px' }}>练习文字</th>
-                  <th style={{ width: '200px', textAlign: 'right' }}>操作</th>
+                  <th style={{ width: '300px', textAlign: 'right' }}>操作</th>
                 </tr>
               </thead>
               <tbody>
                 {assignments.map((assignment) => {
                   const statusStyle = StatusStyles[assignment.status] || StatusStyles.pending
                   const statusLabel = StatusLabels[assignment.status] || '未完成'
-                  const isCompleted = assignment.status === 'completed'
+                  const canSubmitNow = canSubmit(assignment.status)
+                  const canResubmitNow = canResubmit(assignment.status)
+                  const hasSubmitted = assignment.status === 'submitted' || assignment.status === 'reviewed' || assignment.status === 'rejected'
 
                   return (
                     <tr key={assignment.assignment_id}>
                       <td>{getSceneTypeLabel(assignment.scene_type)}</td>
                       <td>{formatDateTime(assignment.assigned_at)}</td>
-                      <td style={{ color: assignment.completed_at ? '#4caf50' : '#999' }}>
-                        {formatDateTime(assignment.completed_at)}
+                      <td style={{ color: assignment.submitted_at ? '#2196f3' : '#999' }}>
+                        {formatDateTime(assignment.submitted_at)}
                       </td>
                       <td>
                         <span style={{
@@ -357,7 +687,7 @@ function MyAssignments({ studentNo, onImportAssignment }) {
                         </div>
                       </td>
                       <td style={{ textAlign: 'right' }}>
-                        <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                        <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
                           <button
                             className="btn btn-sm btn-apply"
                             onClick={() => handleImport(assignment)}
@@ -366,15 +696,36 @@ function MyAssignments({ studentNo, onImportAssignment }) {
                           >
                             导入作业
                           </button>
-                          {!isCompleted && (
+                          {hasSubmitted && (
+                            <button
+                              className="btn btn-sm"
+                              onClick={() => openDetailDialog(assignment)}
+                              title="查看作业详情"
+                              style={{ backgroundColor: '#9c27b0' }}
+                            >
+                              查看详情
+                            </button>
+                          )}
+                          {canSubmitNow && (
                             <button
                               className="btn btn-sm btn-apply"
-                              onClick={() => handleMarkComplete(assignment)}
-                              disabled={completingId === assignment.assignment_id}
-                              title="标记为已完成"
+                              onClick={() => openSubmitDialog(assignment)}
+                              disabled={submittingId === assignment.assignment_id}
+                              title="提交作业"
                               style={{ backgroundColor: '#4caf50' }}
                             >
-                              {completingId === assignment.assignment_id ? '处理中...' : '标记完成'}
+                              {submittingId === assignment.assignment_id ? '处理中...' : '提交作业'}
+                            </button>
+                          )}
+                          {canResubmitNow && (
+                            <button
+                              className="btn btn-sm"
+                              onClick={() => openSubmitDialog(assignment)}
+                              disabled={submittingId === assignment.assignment_id}
+                              title="重新提交作业"
+                              style={{ backgroundColor: '#ff9800' }}
+                            >
+                              {submittingId === assignment.assignment_id ? '处理中...' : '重新提交'}
                             </button>
                           )}
                         </div>
@@ -388,6 +739,8 @@ function MyAssignments({ studentNo, onImportAssignment }) {
           {renderPagination()}
         </>
       )}
+      {renderSubmitDialog()}
+      {renderDetailDialog()}
     </div>
   )
 }
