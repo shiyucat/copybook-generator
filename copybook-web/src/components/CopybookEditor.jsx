@@ -704,31 +704,35 @@ function CopybookEditor({ config, onConfigChange, selectedTemplateId: propSelect
       '的': ['撇', '竖', '横折', '横', '横', '撇', '横折钩', '点'],
     }
     
-    const getStrokeCountFromMap = (char) => {
-      const strokes = strokesMap[char]
-      return strokes ? strokes.length : 0
-    }
+    const strokeNames = strokesMap[character]
     
-    const strokeCount = getStrokeCountFromMap(character)
-    
-    if (strokeCount === 0) {
-      const progressiveTexts = ['1', '→', character]
-      return progressiveTexts
-    }
-    
-    if (strokeCount === 1) {
+    if (!strokeNames || strokeNames.length === 0) {
       return ['1', '→', character]
     }
     
+    if (strokeNames.length === 1) {
+      const strokeChar = STROKE_NAME_TO_CHAR[strokeNames[0]] || strokeNames[0]
+      return [strokeChar, '→', character]
+    }
+    
     const items = []
-    for (let i = 1; i <= strokeCount; i++) {
+    
+    for (let i = 1; i <= strokeNames.length; i++) {
       if (i > 1) {
         items.push('→')
       }
-      items.push(String(i))
+      
+      const partialStrokeNames = strokeNames.slice(0, i)
+      const partialStrokeChars = partialStrokeNames.map(name => 
+        STROKE_NAME_TO_CHAR[name] || name
+      )
+      
+      if (i === strokeNames.length) {
+        items.push(character)
+      } else {
+        items.push(partialStrokeChars.join(''))
+      }
     }
-    items.push('→')
-    items.push(character)
     
     return items
   }, [])
@@ -1304,6 +1308,7 @@ function CopybookEditor({ config, onConfigChange, selectedTemplateId: propSelect
           right_grid_color: rightGridColor,
           right_grid_type: rightGridType,
           stroke_order_color: strokeOrderColor,
+          show_trace_copy: showTraceCopy,
         },
       }
       await templateApi.create(templateData)
