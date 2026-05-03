@@ -137,68 +137,6 @@ function CopybookEditor({ config, onConfigChange, selectedTemplateId: propSelect
 
   const gridSize = 60
 
-  const currentPageChars = useMemo(() => {
-    if (validChars.length === 0) return []
-
-    if (sceneType === SceneType.CHARACTER) {
-      const { maxRowsPerPage } = calculateCharacterSceneLayout()
-      const startIndex = currentPage * maxRowsPerPage
-      const endIndex = Math.min(startIndex + maxRowsPerPage, validChars.length)
-      const chars = validChars.slice(startIndex, endIndex)
-      return [...new Set(chars)]
-    }
-
-    const currentPageSize = PageSize[pageSize] || PageSize.A4
-    const usableHeightMm = currentPageSize.height - PRINT_CONFIG.MARGIN_TOP_MM - PRINT_CONFIG.MARGIN_BOTTOM_MM
-    const cellSizeMm = gridSizeCm * 10
-    const maxRows = Math.max(1, Math.floor(usableHeightMm / cellSizeMm))
-
-    const pageInfo = calculatePageInfo(currentPage, validChars, maxRows, linesPerChar)
-    let charIndex = pageInfo.charIndex
-    let linesOffset = pageInfo.linesOffset
-    let rowIndex = 0
-    const chars = new Set()
-
-    while (charIndex < validChars.length && rowIndex < maxRows) {
-      const linesRemainingForChar = linesPerChar - linesOffset
-      const linesToRenderThisPage = Math.min(linesRemainingForChar, maxRows - rowIndex)
-
-      if (linesToRenderThisPage > 0) {
-        chars.add(validChars[charIndex])
-      }
-
-      rowIndex += linesToRenderThisPage
-      linesOffset += linesToRenderThisPage
-
-      if (linesOffset >= linesPerChar) {
-        charIndex++
-        linesOffset = 0
-      }
-    }
-
-    return [...chars]
-  }, [validChars, currentPage, sceneType, pageSize, gridSizeCm, linesPerChar, calculateCharacterSceneLayout, calculatePageInfo])
-
-  const handleGenerateTeachingVideo = useCallback(async (character) => {
-    if (!character || generatingVideoChar) return
-    
-    setGeneratingVideoChar(character)
-    try {
-      await teachingVideoApi.generateVideo(character, {
-        format: 'mp4',
-        size: 512,
-        fps: 30,
-        strokeColor: fontColor,
-        gridColor: gridColor,
-      })
-      alert(`已生成「${character}」的书写示范视频`)
-    } catch (err) {
-      alert(`生成视频失败: ${err.message}`)
-    } finally {
-      setGeneratingVideoChar(null)
-    }
-  }, [generatingVideoChar, fontColor, gridColor])
-
   const fetchTemplates = useCallback(async () => {
     setLoadingTemplates(true)
     try {
@@ -1071,6 +1009,68 @@ function CopybookEditor({ config, onConfigChange, selectedTemplateId: propSelect
       gap,
     }
   }, [pageSize])
+
+  const currentPageChars = useMemo(() => {
+    if (validChars.length === 0) return []
+
+    if (sceneType === SceneType.CHARACTER) {
+      const { maxRowsPerPage } = calculateCharacterSceneLayout()
+      const startIndex = currentPage * maxRowsPerPage
+      const endIndex = Math.min(startIndex + maxRowsPerPage, validChars.length)
+      const chars = validChars.slice(startIndex, endIndex)
+      return [...new Set(chars)]
+    }
+
+    const currentPageSize = PageSize[pageSize] || PageSize.A4
+    const usableHeightMm = currentPageSize.height - PRINT_CONFIG.MARGIN_TOP_MM - PRINT_CONFIG.MARGIN_BOTTOM_MM
+    const cellSizeMm = gridSizeCm * 10
+    const maxRows = Math.max(1, Math.floor(usableHeightMm / cellSizeMm))
+
+    const pageInfo = calculatePageInfo(currentPage, validChars, maxRows, linesPerChar)
+    let charIndex = pageInfo.charIndex
+    let linesOffset = pageInfo.linesOffset
+    let rowIndex = 0
+    const chars = new Set()
+
+    while (charIndex < validChars.length && rowIndex < maxRows) {
+      const linesRemainingForChar = linesPerChar - linesOffset
+      const linesToRenderThisPage = Math.min(linesRemainingForChar, maxRows - rowIndex)
+
+      if (linesToRenderThisPage > 0) {
+        chars.add(validChars[charIndex])
+      }
+
+      rowIndex += linesToRenderThisPage
+      linesOffset += linesToRenderThisPage
+
+      if (linesOffset >= linesPerChar) {
+        charIndex++
+        linesOffset = 0
+      }
+    }
+
+    return [...chars]
+  }, [validChars, currentPage, sceneType, pageSize, gridSizeCm, linesPerChar, calculateCharacterSceneLayout, calculatePageInfo])
+
+  const handleGenerateTeachingVideo = useCallback(async (character) => {
+    if (!character || generatingVideoChar) return
+    
+    setGeneratingVideoChar(character)
+    try {
+      await teachingVideoApi.generateVideo(character, {
+        format: 'mp4',
+        size: 512,
+        fps: 30,
+        strokeColor: fontColor,
+        gridColor: gridColor,
+      })
+      alert(`已生成「${character}」的书写示范视频`)
+    } catch (err) {
+      alert(`生成视频失败: ${err.message}`)
+    } finally {
+      setGeneratingVideoChar(null)
+    }
+  }, [generatingVideoChar, fontColor, gridColor])
 
   const totalPages = useMemo(() => {
     if (sceneType === SceneType.CHARACTER) {
