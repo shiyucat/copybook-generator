@@ -442,12 +442,22 @@ function MyAssignments({ studentNo, onImportAssignment }) {
   const renderDetailDialog = () => {
     if (!showDetailDialog || !selectedAssignment) return null
 
+    const reviewAnnotations = selectedAssignment.review_annotations
+    let annotations = []
+    if (reviewAnnotations && typeof reviewAnnotations === 'object') {
+      if (Array.isArray(reviewAnnotations)) {
+        annotations = reviewAnnotations
+      } else if (reviewAnnotations.circles && Array.isArray(reviewAnnotations.circles)) {
+        annotations = reviewAnnotations.circles
+      }
+    }
+
     return (
       <div className="modal-overlay" onClick={() => {
         setShowDetailDialog(false)
         setSelectedAssignment(null)
       }}>
-        <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '700px', width: '90vw' }}>
+        <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '900px', width: '95vw', maxHeight: '90vh' }}>
           <div className="modal-header">
             <h3>作业详情</h3>
             <button
@@ -460,7 +470,7 @@ function MyAssignments({ studentNo, onImportAssignment }) {
               ✕
             </button>
           </div>
-          <div className="modal-body">
+          <div className="modal-body" style={{ maxHeight: 'calc(90vh - 160px)', overflowY: 'auto' }}>
             <div style={{ marginBottom: '16px' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <tbody>
@@ -496,6 +506,7 @@ function MyAssignments({ studentNo, onImportAssignment }) {
                         borderRadius: '20px',
                         fontSize: '12px',
                         fontWeight: '500',
+                        whiteSpace: 'nowrap',
                         ...StatusStyles[selectedAssignment.status],
                       }}>
                         {StatusLabels[selectedAssignment.status] || '未知'}
@@ -506,7 +517,12 @@ function MyAssignments({ studentNo, onImportAssignment }) {
                     <tr>
                       <td style={{ padding: '8px', borderBottom: '1px solid #eee', fontWeight: '500' }}>批改结果</td>
                       <td style={{ padding: '8px', borderBottom: '1px solid #eee' }}>
-                        {ReviewStatusLabels[selectedAssignment.review_status] || selectedAssignment.review_status}
+                        <span style={{
+                          color: selectedAssignment.review_status === 'approved' ? '#4caf50' : '#f44336',
+                          fontWeight: '500'
+                        }}>
+                          {ReviewStatusLabels[selectedAssignment.review_status] || selectedAssignment.review_status}
+                        </span>
                       </td>
                     </tr>
                   )}
@@ -524,16 +540,92 @@ function MyAssignments({ studentNo, onImportAssignment }) {
 
             {selectedAssignment.submitted_image && (
               <div>
-                <p style={{ fontSize: '14px', fontWeight: '500', marginBottom: '8px' }}>提交的作业图片：</p>
-                <img
-                  src={selectedAssignment.submitted_image}
-                  alt="提交的作业"
-                  style={{
-                    maxWidth: '100%',
-                    border: '1px solid #ddd',
-                    borderRadius: '4px',
-                  }}
-                />
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                  <p style={{ fontSize: '14px', fontWeight: '500', margin: 0 }}>
+                    提交的作业图片
+                    {annotations.length > 0 && (
+                      <span style={{ fontSize: '12px', color: '#f44336', marginLeft: '8px' }}>
+                        （老师已标记 {annotations.length} 个问题）
+                      </span>
+                    )}
+                  </p>
+                </div>
+                <div style={{ 
+                  position: 'relative', 
+                  border: '2px solid #ddd', 
+                  borderRadius: '4px',
+                  minHeight: '200px',
+                  backgroundColor: '#fafafa'
+                }}>
+                  <img
+                    src={selectedAssignment.submitted_image}
+                    alt="提交的作业"
+                    style={{
+                      maxWidth: '100%',
+                      maxHeight: '400px',
+                      display: 'block',
+                      margin: '0 auto'
+                    }}
+                  />
+                  {annotations.length > 0 && (
+                    <svg style={{ 
+                      position: 'absolute', 
+                      top: 0, 
+                      left: 0, 
+                      width: '100%', 
+                      height: '100%',
+                      pointerEvents: 'none'
+                    }}>
+                      {annotations.map((circle, index) => (
+                        <g key={index}>
+                          <circle
+                            cx={circle.x}
+                            cy={circle.y}
+                            r={circle.radius}
+                            fill="none"
+                            stroke="#f44336"
+                            strokeWidth="3"
+                          />
+                          <text
+                            x={circle.x}
+                            y={circle.y + 5}
+                            textAnchor="middle"
+                            fill="#f44336"
+                            fontSize="14"
+                            fontWeight="bold"
+                          >
+                            {circle.label || `问题${index + 1}`}
+                          </text>
+                        </g>
+                      ))}
+                    </svg>
+                  )}
+                </div>
+                {annotations.length > 0 && (
+                  <div style={{ marginTop: '8px' }}>
+                    <p style={{ fontSize: '13px', color: '#666', marginBottom: '4px' }}>
+                      老师标记的问题：
+                    </p>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                      {annotations.map((circle, index) => (
+                        <span 
+                          key={index}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            padding: '4px 8px',
+                            backgroundColor: '#ffebee',
+                            borderRadius: '4px',
+                            fontSize: '12px',
+                            color: '#f44336'
+                          }}
+                        >
+                          {circle.label || `问题${index + 1}`}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -669,6 +761,7 @@ function MyAssignments({ studentNo, onImportAssignment }) {
                           borderRadius: '20px',
                           fontSize: '12px',
                           fontWeight: '500',
+                          whiteSpace: 'nowrap',
                           ...statusStyle,
                         }}>
                           {statusLabel}
