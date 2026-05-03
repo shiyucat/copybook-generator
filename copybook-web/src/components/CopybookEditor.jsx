@@ -137,6 +137,48 @@ function CopybookEditor({ config, onConfigChange, selectedTemplateId: propSelect
 
   const gridSize = 60
 
+  const currentPageChars = useMemo(() => {
+    if (validChars.length === 0) return []
+
+    if (sceneType === SceneType.CHARACTER) {
+      const { maxRowsPerPage } = calculateCharacterSceneLayout()
+      const startIndex = currentPage * maxRowsPerPage
+      const endIndex = Math.min(startIndex + maxRowsPerPage, validChars.length)
+      const chars = validChars.slice(startIndex, endIndex)
+      return [...new Set(chars)]
+    }
+
+    const currentPageSize = PageSize[pageSize] || PageSize.A4
+    const usableHeightMm = currentPageSize.height - PRINT_CONFIG.MARGIN_TOP_MM - PRINT_CONFIG.MARGIN_BOTTOM_MM
+    const cellSizeMm = gridSizeCm * 10
+    const maxRows = Math.max(1, Math.floor(usableHeightMm / cellSizeMm))
+
+    const pageInfo = calculatePageInfo(currentPage, validChars, maxRows, linesPerChar)
+    let charIndex = pageInfo.charIndex
+    let linesOffset = pageInfo.linesOffset
+    let rowIndex = 0
+    const chars = new Set()
+
+    while (charIndex < validChars.length && rowIndex < maxRows) {
+      const linesRemainingForChar = linesPerChar - linesOffset
+      const linesToRenderThisPage = Math.min(linesRemainingForChar, maxRows - rowIndex)
+
+      if (linesToRenderThisPage > 0) {
+        chars.add(validChars[charIndex])
+      }
+
+      rowIndex += linesToRenderThisPage
+      linesOffset += linesToRenderThisPage
+
+      if (linesOffset >= linesPerChar) {
+        charIndex++
+        linesOffset = 0
+      }
+    }
+
+    return [...chars]
+  }, [validChars, currentPage, sceneType, pageSize, gridSizeCm, linesPerChar, calculateCharacterSceneLayout, calculatePageInfo])
+
   const handleGenerateTeachingVideo = useCallback(async (character) => {
     if (!character || generatingVideoChar) return
     
@@ -1465,59 +1507,6 @@ function CopybookEditor({ config, onConfigChange, selectedTemplateId: propSelect
               仅支持：中文、英文、数字
             </p>
           )}
-          
-          {validChars.length > 0 && (
-            <div style={{ marginTop: '12px' }}>
-              <p style={{ fontSize: '12px', color: '#666', marginBottom: '8px' }}>
-                教我写：点击按钮生成该字的书写过程示范视频
-              </p>
-              <div style={{ 
-                display: 'flex', 
-                flexWrap: 'wrap', 
-                gap: '8px',
-                alignItems: 'center'
-              }}>
-                {validChars.map((char, index) => (
-                  <div
-                    key={index}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      backgroundColor: '#f5f5f5',
-                      borderRadius: '4px',
-                      padding: '4px 8px',
-                      gap: '6px',
-                    }}
-                  >
-                    <span style={{ 
-                      fontSize: '18px', 
-                      fontWeight: 'bold',
-                      minWidth: '24px',
-                      textAlign: 'center'
-                    }}>
-                      {char}
-                    </span>
-                    <button
-                      onClick={() => handleGenerateTeachingVideo(char)}
-                      disabled={generatingVideoChar === char}
-                      style={{
-                        fontSize: '11px',
-                        padding: '3px 8px',
-                        backgroundColor: generatingVideoChar === char ? '#ccc' : '#4CAF50',
-                        color: 'white',
-                        border: 'none',
-                        borderRadius: '3px',
-                        cursor: generatingVideoChar === char ? 'not-allowed' : 'pointer',
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
-                      {generatingVideoChar === char ? '生成中...' : '教我写'}
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
 
         <div className="section">
@@ -2030,6 +2019,84 @@ function CopybookEditor({ config, onConfigChange, selectedTemplateId: propSelect
         <div className="preview-container">
           <canvas ref={canvasRef} className="preview-canvas" />
         </div>
+        
+        {currentPageChars.length > 0 && (
+          <div style={{ 
+            marginTop: '12px', 
+            padding: '12px', 
+            backgroundColor: '#f8f9fa', 
+            borderRadius: '6px',
+            border: '1px solid #e9ecef'
+          }}>
+            <p style={{ 
+              fontSize: '12px', 
+              color: '#666', 
+              margin: '0 0 10px 0',
+              fontWeight: '500'
+            }}>
+              教我写：点击按钮生成该字的书写过程示范视频
+            </p>
+            <div style={{ 
+              display: 'flex', 
+              flexWrap: 'wrap', 
+              gap: '8px',
+              alignItems: 'center'
+            }}>
+              {currentPageChars.map((char, index) => (
+                <div
+                  key={`${char}-${index}`}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    backgroundColor: '#ffffff',
+                    borderRadius: '4px',
+                    padding: '6px 10px',
+                    gap: '8px',
+                    border: '1px solid #e0e0e0',
+                    boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                  }}
+                >
+                  <span style={{ 
+                    fontSize: '20px', 
+                    fontWeight: 'bold',
+                    minWidth: '28px',
+                    textAlign: 'center',
+                    color: '#333'
+                  }}>
+                    {char}
+                  </span>
+                  <button
+                    onClick={() => handleGenerateTeachingVideo(char)}
+                    disabled={generatingVideoChar === char}
+                    style={{
+                      fontSize: '12px',
+                      padding: '4px 12px',
+                      backgroundColor: generatingVideoChar === char ? '#9e9e9e' : '#4CAF50',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '4px',
+                      cursor: generatingVideoChar === char ? 'not-allowed' : 'pointer',
+                      whiteSpace: 'nowrap',
+                      transition: 'background-color 0.2s',
+                    }}
+                    onMouseEnter={(e) => {
+                      if (generatingVideoChar !== char) {
+                        e.target.style.backgroundColor = '#45a049'
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (generatingVideoChar !== char) {
+                        e.target.style.backgroundColor = '#4CAF50'
+                      }
+                    }}
+                  >
+                    {generatingVideoChar === char ? '生成中...' : '教我写'}
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {showSaveDialog && (
