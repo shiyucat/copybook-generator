@@ -30,6 +30,8 @@ const DEFAULT_CONFIG = {
   character_color: '#000000',
   right_grid_color: '#000000',
   right_grid_type: '米字格',
+  stroke_order_color: '#000000',
+  show_trace_copy: false,
 }
 
 const USER_MODE_TEACHER = 'teacher'
@@ -85,6 +87,12 @@ function App() {
       character_color: safeConfig.character_color ?? DEFAULT_CONFIG.character_color,
       right_grid_color: safeConfig.right_grid_color ?? DEFAULT_CONFIG.right_grid_color,
       right_grid_type: safeConfig.right_grid_type ?? DEFAULT_CONFIG.right_grid_type,
+      stroke_order_color: /^#[0-9A-Fa-f]{6}$/.test(safeConfig.stroke_order_color)
+        ? safeConfig.stroke_order_color
+        : DEFAULT_CONFIG.stroke_order_color,
+      show_trace_copy: safeConfig.show_trace_copy !== undefined
+        ? safeConfig.show_trace_copy
+        : DEFAULT_CONFIG.show_trace_copy,
     }
     setCurrentConfig(mergedConfig)
     setSelectedTemplateId(template.template_id)
@@ -125,6 +133,12 @@ function App() {
       character_color: safeConfig.character_color ?? DEFAULT_CONFIG.character_color,
       right_grid_color: safeConfig.right_grid_color ?? DEFAULT_CONFIG.right_grid_color,
       right_grid_type: safeConfig.right_grid_type ?? DEFAULT_CONFIG.right_grid_type,
+      stroke_order_color: /^#[0-9A-Fa-f]{6}$/.test(safeConfig.stroke_order_color)
+        ? safeConfig.stroke_order_color
+        : DEFAULT_CONFIG.stroke_order_color,
+      show_trace_copy: safeConfig.show_trace_copy !== undefined
+        ? safeConfig.show_trace_copy
+        : DEFAULT_CONFIG.show_trace_copy,
     }
     setCurrentConfig(mergedConfig)
     setSelectedTemplateId(null)
@@ -231,6 +245,12 @@ function App() {
       character_color: safeConfig.character_color ?? DEFAULT_CONFIG.character_color,
       right_grid_color: safeConfig.right_grid_color ?? DEFAULT_CONFIG.right_grid_color,
       right_grid_type: safeConfig.right_grid_type ?? DEFAULT_CONFIG.right_grid_type,
+      stroke_order_color: /^#[0-9A-Fa-f]{6}$/.test(safeConfig.stroke_order_color)
+        ? safeConfig.stroke_order_color
+        : DEFAULT_CONFIG.stroke_order_color,
+      show_trace_copy: safeConfig.show_trace_copy !== undefined
+        ? safeConfig.show_trace_copy
+        : DEFAULT_CONFIG.show_trace_copy,
     }
     setCurrentConfig(mergedConfig)
     setSelectedTemplateId(null)
